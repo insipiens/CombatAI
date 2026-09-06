@@ -15,10 +15,13 @@ import tempfile
 from typing import Any
 from uuid import uuid4
 
-if __package__:
-    from .build_radio_overlay import BEGIN_MARKER, build_overlay
-else:  # Executed directly as `py tools\install.py`.
-    from build_radio_overlay import BEGIN_MARKER, build_overlay
+if not __package__:
+    # The embeddable runtime uses an explicit _pth file and therefore does not add
+    # this script's directory automatically. Establish the repository root before
+    # importing the tools package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools.build_radio_overlay import BEGIN_MARKER, build_overlay
 
 RELATIVE_PANEL = Path("Scripts/UI/RadioCommandDialogPanel/RadioCommandDialogsPanel.lua")
 STATE_DIRECTORY = Path("Scripts/CombatAI")

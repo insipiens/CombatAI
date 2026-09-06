@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import subprocess
+import sys
 import unittest
 
 
@@ -25,6 +27,16 @@ class BootstrapTests(unittest.TestCase):
             content = (ROOT / filename).read_text(encoding="utf-8")
             self.assertIn("runtime\\python.exe", content, filename)
             self.assertNotIn("py -", content.lower(), filename)
+
+    def test_installer_starts_with_isolated_python_path(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-I", str(ROOT / "tools" / "install.py"), "--help"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
