@@ -23,31 +23,129 @@ The Python console prints the menu and permits numbered selection. An `accepted`
 that the Lua call completed; DCS does not expose whether the campaign script subsequently
 produced its intended effect.
 
-## Development check
+## Experimental Windows setup
 
-The Windows-side proof has no third-party Python dependencies:
+This is a developer proof of concept, not a packaged release. It has passed its automated
+protocol tests but has not yet passed the in-game acceptance test below. The procedure is
+reversible and does not modify the DCS installation under `Program Files`.
+
+There is no existing "router" to edit. The setup tool takes the radio-panel file that DCS
+currently uses, appends the CombatAI hook to a generated copy, and places that copy at the
+equivalent path under Saved Games. DCS then loads the Saved Games version.
+
+### Requirements
+
+- Windows 11 x64;
+- Python 3.11 or newer available through the `py` launcher;
+- DCS World;
+- a local clone or downloaded copy of this repository;
+- DCS and VAICOM closed while changing the Lua file.
+
+Open PowerShell in the CombatAI repository and install the Python package:
 
 ```powershell
-py -3.13 -m pip install -e .
-py -3.13 -m unittest discover -s tests -v
-py -3.13 -m combatai
+py -3 -m pip install -e .
+py -3 -m unittest discover -s tests -v
 ```
 
-## DCS integration status
+All tests should pass before proceeding.
 
-The hook is designed to be appended to the user's own installed
-`Scripts\UI\RadioCommandDialogPanel\RadioCommandDialogsPanel.lua`. The generated file then
-shadows that same relative path under `Saved Games\DCS\Scripts`.
+### Install the DCS hook
 
-`tools\build_radio_overlay.py` performs this composition atomically and refuses to overwrite
-an existing Saved Games override. This refusal is intentional: VAICOM currently owns that
-path on systems where it is installed. The first in-game test therefore requires an explicit
-test profile or a separately agreed migration procedure; the tool will not silently replace
-VAICOM or any other mod.
+With DCS and VAICOM closed, run:
 
-The repository does not distribute Eagle Dynamics' Lua implementation. A generated override
-must be built from the user's locally installed DCS version, and it must be regenerated after
-the source file changes.
+```powershell
+py -3 tools\install.py install
+```
+
+The installer searches the standard standalone and Steam DCS locations and the normal
+`Saved Games\DCS` or `Saved Games\DCS.openbeta` directories. It then chooses its base file:
+
+1. if a Saved Games radio-panel file exists, append CombatAI to that exact file so additions
+   made by VAICOM or another mod are retained;
+2. otherwise, copy the current DCS installation version and append CombatAI to the copy;
+3. never alter the file under `Program Files`.
+
+Before replacing anything, it saves the selected base under
+`Saved Games\DCS\Scripts\CombatAI\backups`. It writes the generated panel atomically and
+records the original and installed SHA-256 hashes in `Scripts\CombatAI\install.json`.
+
+If automatic discovery finds no installation—or more than one—give the paths explicitly:
+
+```powershell
+py -3 tools\install.py install `
+  --dcs-install "C:\Program Files\Eagle Dynamics\DCS World" `
+  --saved-games "$env:USERPROFILE\Saved Games\DCS"
+```
+
+For Steam, `--dcs-install` normally points to:
+
+```text
+C:\Program Files (x86)\Steam\steamapps\common\DCSWorld
+```
+
+CombatAI refuses a second installation, an unrecognised existing CombatAI modification, or
+an ambiguous DCS directory. It does not guess which installation the user intended.
+
+Check the installed state at any time:
+
+```powershell
+py -3 tools\install.py status
+```
+
+On a VAICOM system this is experimental coexistence. The two projects use different UDP
+ports, but their update callbacks have not yet been tested together in DCS. Do not run
+VAICOM's repair function during the test because it may regenerate the panel and remove the
+CombatAI addition.
+
+### Remove the DCS hook
+
+With DCS and VAICOM closed, run:
+
+```powershell
+py -3 tools\install.py uninstall
+```
+
+If there was an earlier Saved Games override, the installer restores it byte-for-byte. If
+there was not, it removes the generated override so DCS returns to its Program Files version.
+The backup and an archived removal manifest are retained.
+
+Removal is deliberately refused when the active file has changed since installation. That
+prevents CombatAI from overwriting a subsequent DCS, VAICOM, or third-party update. Inspect
+or repair the installation manually in that case.
+
+### Run the proof of concept
+
+Start the Windows-side listener before entering a DCS mission:
+
+```powershell
+py -3 -m combatai
+```
+
+Then start DCS and load a mission containing F10 options. The console should print the current
+menu hierarchy. Enter its displayed number to invoke an item, `R` to request a new snapshot,
+or `Q` to stop the console.
+
+If no menu arrives:
+
+1. confirm that a mission is running and the player is in an aircraft;
+2. run `py -3 tools\install.py status` and confirm that `healthy` is `true`;
+3. confirm that no other process is using UDP ports `34383` or `34384`;
+4. inspect `Saved Games\DCS\Logs\dcs.log` for Lua, socket, JSON, or port-binding errors;
+5. run the uninstall command if DCS radio operation behaves differently.
+
+The repository does not distribute Eagle Dynamics' Lua implementation. Every generated
+override is built from files already on the user's computer. It must be regenerated when DCS
+or VAICOM changes the underlying radio-panel file.
+
+## Development check
+
+The Windows-side proof currently has no third-party Python dependencies:
+
+```powershell
+py -3 -m unittest discover -s tests -v
+py -3 -m combatai
+```
 
 Default protocol ports are:
 
