@@ -47,7 +47,7 @@ standard library. It does not install Python system-wide, alter `PATH`, use the 
 Store, or install `pip`.
 
 ```text
-setup.bat
+.\setup.bat
 ```
 
 The pinned archive and checksum come from the
@@ -57,7 +57,7 @@ If an existing private runtime fails validation, setup refuses to overwrite it.
 To run the automated checks with the private runtime:
 
 ```powershell
-runtime\python.exe -m unittest discover -s tests -v
+.\runtime\python.exe -m unittest discover -s tests -v
 ```
 
 ### Install the DCS hook
@@ -65,7 +65,7 @@ runtime\python.exe -m unittest discover -s tests -v
 With DCS and VAICOM closed, run:
 
 ```powershell
-install.bat
+.\install.bat
 ```
 
 The installer searches the standard standalone and Steam DCS locations and the normal
@@ -83,7 +83,7 @@ records the original and installed SHA-256 hashes in `Scripts\CombatAI\install.j
 If automatic discovery finds no installation—or more than one—give the paths explicitly:
 
 ```powershell
-install.bat `
+.\install.bat `
   --dcs-install "C:\Program Files\Eagle Dynamics\DCS World" `
   --saved-games "$env:USERPROFILE\Saved Games\DCS"
 ```
@@ -100,7 +100,7 @@ an ambiguous DCS directory. It does not guess which installation the user intend
 Check the installed state at any time:
 
 ```powershell
-runtime\python.exe tools\install.py status
+.\runtime\python.exe tools\install.py status
 ```
 
 On a VAICOM system this is experimental coexistence. The two projects use different UDP
@@ -113,7 +113,7 @@ CombatAI addition.
 With DCS and VAICOM closed, run:
 
 ```powershell
-uninstall.bat
+.\uninstall.bat
 ```
 
 If there was an earlier Saved Games override, the installer restores it byte-for-byte. If
@@ -129,7 +129,7 @@ or repair the installation manually in that case.
 Start the Windows-side listener before entering a DCS mission:
 
 ```powershell
-run.bat
+.\run.bat
 ```
 
 Then start DCS and load a mission containing F10 options. The console should print the current
@@ -139,7 +139,7 @@ or `Q` to stop the console.
 If no menu arrives:
 
 1. confirm that a mission is running and the player is in an aircraft;
-2. run `runtime\python.exe tools\install.py status` and confirm that `healthy` is `true`;
+2. run `.\runtime\python.exe tools\install.py status` and confirm that `healthy` is `true`;
 3. confirm that no other process is using UDP ports `34383` or `34384`;
 4. inspect `Saved Games\DCS\Logs\dcs.log` for Lua, socket, JSON, or port-binding errors;
 5. run the uninstall command if DCS radio operation behaves differently.
