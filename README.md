@@ -36,26 +36,36 @@ equivalent path under Saved Games. DCS then loads the Saved Games version.
 ### Requirements
 
 - Windows 11 x64;
-- Python 3.11 or newer available through the `py` launcher;
 - DCS World;
-- a local clone or downloaded copy of this repository;
+- a local clone or extracted download of this repository;
 - DCS and VAICOM closed while changing the Lua file.
 
-Open PowerShell in the CombatAI repository and install the Python package:
+Python does not need to be installed on Windows. Run `setup.bat` once. It downloads the
+official CPython 3.13.15 x64 embeddable package into `CombatAI\runtime`, verifies the
+published SHA-256 before extraction, and configures it to see only the application source and
+standard library. It does not install Python system-wide, alter `PATH`, use the Microsoft
+Store, or install `pip`.
 
-```powershell
-py -3 -m pip install -e .
-py -3 -m unittest discover -s tests -v
+```text
+setup.bat
 ```
 
-All tests should pass before proceeding.
+The pinned archive and checksum come from the
+[official Python 3.13.15 release](https://www.python.org/downloads/release/python-31315/).
+If an existing private runtime fails validation, setup refuses to overwrite it.
+
+To run the automated checks with the private runtime:
+
+```powershell
+runtime\python.exe -m unittest discover -s tests -v
+```
 
 ### Install the DCS hook
 
 With DCS and VAICOM closed, run:
 
 ```powershell
-py -3 tools\install.py install
+install.bat
 ```
 
 The installer searches the standard standalone and Steam DCS locations and the normal
@@ -73,7 +83,7 @@ records the original and installed SHA-256 hashes in `Scripts\CombatAI\install.j
 If automatic discovery finds no installation—or more than one—give the paths explicitly:
 
 ```powershell
-py -3 tools\install.py install `
+install.bat `
   --dcs-install "C:\Program Files\Eagle Dynamics\DCS World" `
   --saved-games "$env:USERPROFILE\Saved Games\DCS"
 ```
@@ -90,7 +100,7 @@ an ambiguous DCS directory. It does not guess which installation the user intend
 Check the installed state at any time:
 
 ```powershell
-py -3 tools\install.py status
+runtime\python.exe tools\install.py status
 ```
 
 On a VAICOM system this is experimental coexistence. The two projects use different UDP
@@ -103,7 +113,7 @@ CombatAI addition.
 With DCS and VAICOM closed, run:
 
 ```powershell
-py -3 tools\install.py uninstall
+uninstall.bat
 ```
 
 If there was an earlier Saved Games override, the installer restores it byte-for-byte. If
@@ -119,7 +129,7 @@ or repair the installation manually in that case.
 Start the Windows-side listener before entering a DCS mission:
 
 ```powershell
-py -3 -m combatai
+run.bat
 ```
 
 Then start DCS and load a mission containing F10 options. The console should print the current
@@ -129,7 +139,7 @@ or `Q` to stop the console.
 If no menu arrives:
 
 1. confirm that a mission is running and the player is in an aircraft;
-2. run `py -3 tools\install.py status` and confirm that `healthy` is `true`;
+2. run `runtime\python.exe tools\install.py status` and confirm that `healthy` is `true`;
 3. confirm that no other process is using UDP ports `34383` or `34384`;
 4. inspect `Saved Games\DCS\Logs\dcs.log` for Lua, socket, JSON, or port-binding errors;
 5. run the uninstall command if DCS radio operation behaves differently.
@@ -140,11 +150,11 @@ or VAICOM changes the underlying radio-panel file.
 
 ## Development check
 
-The Windows-side proof currently has no third-party Python dependencies:
+Developers who already have Python 3.11 or newer can use it instead of the private runtime:
 
 ```powershell
+py -3 -m pip install -e .
 py -3 -m unittest discover -s tests -v
-py -3 -m combatai
 ```
 
 Default protocol ports are:
