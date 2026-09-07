@@ -3,7 +3,10 @@
 -- It deliberately exports only the live F10 menu and accepts only validated menu actions.
 
 do
-    local cai_base = _G
+    -- RadioCommandDialogsPanel switches into a Lua module environment where _G
+    -- is not exposed.  The host panel's lexical `base` points at DCS's real
+    -- global environment and is also the route used by VAICOM's appended code.
+    local cai_base = base
     cai_base.package.path = cai_base.package.path .. ";.\\LuaSocket\\?.lua;"
     cai_base.package.cpath = cai_base.package.cpath .. ";.\\LuaSocket\\?.dll;"
 
