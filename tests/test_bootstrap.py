@@ -23,7 +23,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn("get-pip", setup.lower())
 
     def test_entry_points_use_only_private_python(self) -> None:
-        for filename in ("install.bat", "run.bat", "uninstall.bat"):
+        for filename in ("install.bat", "microphone.bat", "run.bat", "uninstall.bat"):
             content = (ROOT / filename).read_text(encoding="utf-8")
             self.assertIn("runtime\\python.exe", content, filename)
             self.assertNotIn("py -", content.lower(), filename)

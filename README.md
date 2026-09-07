@@ -4,8 +4,9 @@ CombatAI is intended to remove radio-menu interaction from DCS World mission pla
 Its eventual runtime path is HOTAS PTT, local speech recognition, deterministic command
 routing, optional Gemini interpretation, DCS execution, and short local speech output.
 
-This repository currently contains only the first technical proof: access to the live,
-mission-generated F10 menu over localhost UDP. It does not yet contain STT, Gemini or TTS.
+This repository contains the first technical proof—access to the live, mission-generated
+F10 menu over localhost UDP—and Windows microphone selection. It does not yet contain audio
+recording, STT, Gemini or TTS.
 
 ## Current proof of concept
 
@@ -131,6 +132,21 @@ update or VAICOM reset may therefore require inspection or repair rather than au
 restoration.
 
 ### Run the proof of concept
+
+Choose the microphone CombatAI will use:
+
+```powershell
+.\microphone.bat
+```
+
+The command lists Windows recording inputs, saves the selected device under the current
+Windows user's local application-data folder, and displays an eight-second live level meter.
+It captures only the short-lived audio needed to calculate the meter; it does not save or
+play back audio. Run it again whenever the desired device changes. To inspect devices without
+changing the saved choice, use `.\microphone.bat --list`.
+
+Microphone selection is currently independent of the F10 console. Speech recognition and
+voice-triggered execution have deliberately not been added yet.
 
 Start the Windows-side listener before entering a DCS mission:
 
