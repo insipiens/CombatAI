@@ -10,6 +10,7 @@ from .protocol import MenuItem
 
 _LIST_RE = re.compile(r"^\s*list\s+(.+?)\s+commands?\s*[.!?]*\s*$", re.IGNORECASE)
 _REPEAT = {"repeat", "repeat please", "say again", "say again please"}
+_F10_ROOT_LABELS = {"f10", "f10other", "other"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,14 +47,24 @@ def parse_meta_command(transcript: str) -> MetaCommand | None:
     return None
 
 
+def _matches_node(label: str, requested_node: str, index: int) -> bool:
+    wanted = _compact(requested_node)
+    actual = _compact(label)
+    if actual == wanted:
+        return True
+    # DCS conventionally exposes the F10 branch as "Other"/"F10 Other".
+    # Accept the cockpit key name as an application-side alias, but only for
+    # the top-level node so a nested menu named "Other" cannot be mistaken for F10.
+    return wanted == "f10" and index == 0 and actual in _F10_ROOT_LABELS
+
+
 def list_node_children(items: tuple[MenuItem, ...], requested_node: str) -> NodeListing:
     """Return immediate children of a named node reconstructed from flattened paths."""
-    wanted = _compact(requested_node)
     occurrences: list[tuple[str, tuple[str, ...]]] = []
 
     for item in items:
         for index, label in enumerate(item.path):
-            if _compact(label) != wanted:
+            if not _matches_node(label, requested_node, index):
                 continue
             child = item.path[index + 1] if index + 1 < len(item.path) else None
             if child is not None:
