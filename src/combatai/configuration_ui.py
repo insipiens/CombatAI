@@ -14,6 +14,7 @@ from typing import Any
 import webbrowser
 
 from .audio_cues import play_cue
+from .audio_output import AudioOutput
 from .configuration_store import (
     CUE_VOLUME_RANGE,
     MINIMUM_LEAD_RANGE,
@@ -27,6 +28,7 @@ from .event_log import log_directory, recent_events, write_event
 from .hotas import SdlHotasInput, learn_binding, resolve_binding, wait_for_release
 from .microphone import WinMmAudioInput
 from .stt import PROJECT_ROOT
+from .tts import PiperSpeech
 
 
 HOST = "127.0.0.1"
@@ -50,6 +52,7 @@ class ConfigurationApplication:
             "log_path": str(log_directory()),
             "microphones": [asdict(device) for device in self.audio.microphones()],
             "controllers": [asdict(device) for device in controllers],
+            "outputs": AudioOutput.devices(),
             "models": sorted(models),
             "score_range": MINIMUM_SCORE_RANGE,
             "lead_range": MINIMUM_LEAD_RANGE,
@@ -68,11 +71,17 @@ class ConfigurationApplication:
         available_models.add(str(load_document()["stt"]["model"]))
         if model not in available_models:
             raise ValueError("Select an installed Whisper model.")
+        output_device = request.get("output_device") or None
+        if output_device is not None and output_device not in AudioOutput.devices():
+            raise ValueError("Select a currently connected audio output.")
         document = update_settings(
             load_document(),
             minimum_score=request.get("minimum_score"),
             minimum_lead=request.get("minimum_lead"),
             model=model,
+            use_gpu=request.get("use_gpu"),
+            output_device=output_device,
+            speech_length_scale=request.get("speech_length_scale"),
             microphone=asdict(microphone),
             audio_cues=request.get("audio_cues"),
             cue_volume=request.get("cue_volume"),
@@ -132,8 +141,21 @@ class ConfigurationApplication:
             raise ValueError("Cue volume must be a number.")
         if not CUE_VOLUME_RANGE[0] <= float(volume) <= CUE_VOLUME_RANGE[1]:
             raise ValueError("Cue volume is outside the configured range.")
-        if not play_cue(outcome, volume=float(volume)):
+        output_device = request.get("output_device") or None
+        if not play_cue(
+            outcome,
+            volume=float(volume),
+            output=AudioOutput(output_device),
+        ):
             raise OSError("Windows could not play the audio cue.")
+        return {"played": True}
+
+    def voice_test(self, request: dict[str, Any]) -> dict[str, Any]:
+        speech = PiperSpeech(
+            output_device=request.get("output_device") or None,
+            length_scale=float(request.get("speech_length_scale")),
+        )
+        speech.speak("CombatAI ready. Flight, rejoin formation.")
         return {"played": True}
 
 
@@ -175,6 +197,8 @@ class ConfigurationHandler(BaseHTTPRequestHandler):
                 result = self.server.application.microphone_test(request)
             elif self.path == "/api/cue/test":
                 result = self.server.application.cue_test(request)
+            elif self.path == "/api/voice/test":
+                result = self.server.application.voice_test(request)
             else:
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
@@ -256,7 +280,7 @@ PAGE = r'''<!doctype html>
 <section class="card"><h2>Microphone</h2><label for="microphone">Recording device</label><select id="microphone"></select><button id="micTest">Run three-second level test</button><div id="micResult" class="status">No test run.</div></section>
 <section class="card"><h2>Push to talk</h2><div id="pttCurrent" class="status">Loading…</div><div id="controllers" class="hint"></div><button id="learnPtt" class="primary">Learn a HOTAS button</button><button id="keyboardPtt">Use Space only</button><div class="hint">Learning ignores controls already held when scanning starts. Press and release the desired button.</div></section>
 <section class="card"><h2>Command matching</h2><label>Minimum match <span id="scoreValue" class="value"></span></label><input id="score" type="range" step="0.01"><label>Minimum lead over runner-up <span id="leadValue" class="value"></span></label><input id="lead" type="range" step="0.01"><div class="hint">Both conditions must pass before a command is sent.</div></section>
-<section class="card"><h2>Speech recognition</h2><label for="model">Installed Whisper model</label><select id="model"></select><div class="hint">Live DCS vocabulary prompting remains enabled because it materially improved recognition.</div><h2 style="margin-top:24px">Audio feedback</h2><label><input id="audioCues" type="checkbox"> Play accepted and rejected cues</label><label>Cue volume <span id="cueValue" class="value"></span></label><input id="cueVolume" type="range" step="0.05"><button id="testAccepted">Test accepted cue</button><button id="testRejected">Test rejected cue</button></section>
+<section class="card"><h2>Speech recognition</h2><label for="model">Installed Whisper model</label><select id="model"></select><label><input id="useGpu" type="checkbox"> Use GPU acceleration (experimental)</label><div class="hint">Install another model with setup-stt.bat small.en or medium.en. Live DCS vocabulary prompting remains enabled.</div><h2 style="margin-top:24px">Audio output</h2><label for="output">Playback device</label><select id="output"></select><label>Speech pace <span id="paceValue" class="value"></span></label><input id="speechPace" type="range" min="0.60" max="1.20" step="0.02"><div class="hint">Lower values speak faster. 0.80 is the brisk default.</div><button id="testVoice">Test Alan voice</button><h2 style="margin-top:24px">Audio feedback</h2><label><input id="audioCues" type="checkbox"> Play accepted and rejected cues</label><label>Cue volume <span id="cueValue" class="value"></span></label><input id="cueVolume" type="range" step="0.05"><button id="testAccepted">Test accepted cue</button><button id="testRejected">Test rejected cue</button></section>
 <section class="card wide"><button id="save" class="primary">Save configuration</button><div id="saveResult" class="status">No unsaved changes.</div><div id="paths" class="paths"></div></section>
 <section class="card wide"><h2>Recent activity</h2><div id="logs" class="log">No events yet.</div></section>
 </div></main><script>
@@ -264,17 +288,18 @@ const token='__TOKEN__';let state=null;let learning=false;
 const $=id=>document.getElementById(id);const pct=n=>Math.round(n*100)+'%';
 async function api(path,body){const options=body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CombatAI-Token':token},body:JSON.stringify(body)};const response=await fetch(path,options);const value=await response.json();if(!response.ok)throw new Error(value.error||'Request failed');return value}
 function option(select,value,label){const node=document.createElement('option');node.value=value;node.textContent=label;select.appendChild(node)}
-function render(s){state=s;const c=s.config;$('microphone').innerHTML='';s.microphones.forEach(m=>option($('microphone'),m.device_id,m.name));if(c.microphone)$('microphone').value=c.microphone.device_id;$('score').min=s.score_range[0];$('score').max=s.score_range[1];$('score').value=c.matching.minimum_score;$('lead').min=s.lead_range[0];$('lead').max=s.lead_range[1];$('lead').value=c.matching.minimum_lead;$('audioCues').checked=c.feedback.audio_cues;$('cueVolume').min=s.cue_volume_range[0];$('cueVolume').max=s.cue_volume_range[1];$('cueVolume').value=c.feedback.cue_volume;values();$('model').innerHTML='';s.models.forEach(m=>option($('model'),m,m));$('model').value=c.stt.model;const p=c.ptt;$('pttCurrent').textContent=p.mode==='hotas'?`${p.name} — button ${p.button}`:'Space keyboard';$('controllers').textContent=s.controllers.length?s.controllers.map(d=>`${d.name} (${d.button_count} buttons)`).join(' · '):'No SDL controllers detected.';$('paths').textContent=`Configuration: ${s.config_path} · Logs: ${s.log_path}`;renderLogs(s.events)}
-function values(){$('scoreValue').textContent=pct(+$('score').value);$('leadValue').textContent=pct(+$('lead').value);$('cueValue').textContent=pct(+$('cueVolume').value)}
+function render(s){state=s;const c=s.config;$('microphone').innerHTML='';s.microphones.forEach(m=>option($('microphone'),m.device_id,m.name));if(c.microphone)$('microphone').value=c.microphone.device_id;$('score').min=s.score_range[0];$('score').max=s.score_range[1];$('score').value=c.matching.minimum_score;$('lead').min=s.lead_range[0];$('lead').max=s.lead_range[1];$('lead').value=c.matching.minimum_lead;$('audioCues').checked=c.feedback.audio_cues;$('cueVolume').min=s.cue_volume_range[0];$('cueVolume').max=s.cue_volume_range[1];$('cueVolume').value=c.feedback.cue_volume;values();$('model').innerHTML='';s.models.forEach(m=>option($('model'),m,m));$('model').value=c.stt.model;$('useGpu').checked=c.stt.use_gpu;$('output').innerHTML='';option($('output'),'','Windows default');s.outputs.forEach(d=>option($('output'),d,d));$('output').value=c.audio.output_device||'';$('speechPace').value=c.audio.speech_length_scale;const p=c.ptt;$('pttCurrent').textContent=p.mode==='hotas'?`${p.name} — button ${p.button}`:'Space keyboard';$('controllers').textContent=s.controllers.length?s.controllers.map(d=>`${d.name} (${d.button_count} buttons)`).join(' · '):'No SDL controllers detected.';$('paths').textContent=`Configuration: ${s.config_path} · Logs: ${s.log_path}`;renderLogs(s.events)}
+function values(){$('scoreValue').textContent=pct(+$('score').value);$('leadValue').textContent=pct(+$('lead').value);$('cueValue').textContent=pct(+$('cueVolume').value);$('paceValue').textContent=(+$('speechPace').value).toFixed(2)}
 function renderLogs(events){const box=$('logs');box.innerHTML='';if(!events.length){box.textContent='No events yet.';return}events.slice().reverse().forEach(e=>{const row=document.createElement('div');row.textContent=`${e.timestamp||''}  ${e.event||''}  ${e.transcript||e.message||e.reason||''}`;box.appendChild(row)})}
 async function load(){try{render(await api('/api/status'))}catch(e){$('saveResult').textContent=e.message;$('saveResult').classList.add('error')}}
-$('score').oninput=values;$('lead').oninput=values;$('cueVolume').oninput=values;
-$('save').onclick=async()=>{try{const s=await api('/api/settings',{microphone_id:+$('microphone').value,minimum_score:+$('score').value,minimum_lead:+$('lead').value,model:$('model').value,audio_cues:$('audioCues').checked,cue_volume:+$('cueVolume').value});render(s);$('saveResult').textContent='Configuration saved.'}catch(e){$('saveResult').textContent=e.message;$('saveResult').classList.add('error')}};
+$('score').oninput=values;$('lead').oninput=values;$('cueVolume').oninput=values;$('speechPace').oninput=values;
+$('save').onclick=async()=>{try{const s=await api('/api/settings',{microphone_id:+$('microphone').value,minimum_score:+$('score').value,minimum_lead:+$('lead').value,model:$('model').value,use_gpu:$('useGpu').checked,output_device:$('output').value||null,speech_length_scale:+$('speechPace').value,audio_cues:$('audioCues').checked,cue_volume:+$('cueVolume').value});render(s);$('saveResult').textContent='Configuration saved.'}catch(e){$('saveResult').textContent=e.message;$('saveResult').classList.add('error')}};
 $('micTest').onclick=async()=>{try{$('micResult').textContent='Speak normally for three seconds…';const r=await api('/api/microphone/test',{microphone_id:+$('microphone').value});$('micResult').textContent=`Average ${r.average_dbfs??'silence'} dBFS · peak ${r.peak_dbfs??'silence'} dBFS`}catch(e){$('micResult').textContent=e.message;$('micResult').classList.add('error')}};
 $('learnPtt').onclick=async()=>{learning=true;try{$('pttCurrent').textContent='Scanning all controllers—press and release the desired button…';const r=await api('/api/hotas/learn',{});render(r.status);$('pttCurrent').textContent=`Saved ${r.binding.name} — button ${r.binding.button}. Press it again to test.`}catch(e){$('pttCurrent').textContent=e.message;$('pttCurrent').classList.add('error')}finally{learning=false}};
 $('keyboardPtt').onclick=async()=>{try{render(await api('/api/hotas/keyboard',{}))}catch(e){$('pttCurrent').textContent=e.message}};
-$('testAccepted').onclick=async()=>{try{await api('/api/cue/test',{outcome:'accepted',volume:+$('cueVolume').value})}catch(e){$('saveResult').textContent=e.message}};
-$('testRejected').onclick=async()=>{try{await api('/api/cue/test',{outcome:'rejected',volume:+$('cueVolume').value})}catch(e){$('saveResult').textContent=e.message}};
+$('testAccepted').onclick=async()=>{try{await api('/api/cue/test',{outcome:'accepted',volume:+$('cueVolume').value,output_device:$('output').value||null})}catch(e){$('saveResult').textContent=e.message}};
+$('testRejected').onclick=async()=>{try{await api('/api/cue/test',{outcome:'rejected',volume:+$('cueVolume').value,output_device:$('output').value||null})}catch(e){$('saveResult').textContent=e.message}};
+$('testVoice').onclick=async()=>{try{await api('/api/voice/test',{output_device:$('output').value||null,speech_length_scale:+$('speechPace').value})}catch(e){$('saveResult').textContent=e.message}};
 setInterval(async()=>{if(learning||!state||state.config.ptt.mode!=='hotas')return;try{const r=await api('/api/ptt-state');$('pttCurrent').classList.toggle('pressed',r.pressed);if(r.pressed)$('pttCurrent').textContent=`${r.label} — PRESSED`;else $('pttCurrent').textContent=`${r.label} — ready`}catch(e){}},120);
 setInterval(async()=>{if(learning)return;try{renderLogs((await api('/api/logs')).events)}catch(e){}},5000);load();
 </script></body></html>'''

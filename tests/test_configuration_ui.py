@@ -7,15 +7,22 @@ from combatai.configuration_ui import PAGE
 
 class ConfigurationUiTests(unittest.TestCase):
     def test_page_exposes_required_setup_controls(self) -> None:
-        self.assertIn("Recording device", PAGE)
-        self.assertIn("Learn a HOTAS button", PAGE)
-        self.assertIn("Minimum match", PAGE)
-        self.assertIn("Minimum lead over runner-up", PAGE)
-        self.assertIn("Installed Whisper model", PAGE)
-        self.assertIn("Recent activity", PAGE)
-        self.assertIn("Audio feedback", PAGE)
-        self.assertIn("Test accepted cue", PAGE)
-        self.assertIn("__TOKEN__", PAGE)
+        for label in (
+            "Recording device",
+            "Learn a HOTAS button",
+            "Minimum match",
+            "Minimum lead over runner-up",
+            "Installed Whisper model",
+            "Use GPU acceleration",
+            "Playback device",
+            "Speech pace",
+            "Test Alan voice",
+            "Recent activity",
+            "Audio feedback",
+            "Test accepted cue",
+            "__TOKEN__",
+        ):
+            self.assertIn(label, PAGE)
 
 
 if __name__ == "__main__":

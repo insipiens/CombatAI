@@ -1,26 +1,23 @@
 from __future__ import annotations
 
-from io import BytesIO
 import unittest
-import wave
 
-from combatai.audio_cues import _cue_wave, play_cue
+from combatai.audio_cues import _cue_pcm, play_cue
 
 
 class AudioCueTests(unittest.TestCase):
-    def test_accepted_and_rejected_cues_are_short_mono_waves(self) -> None:
-        accepted = _cue_wave("accepted", 0.25)
-        rejected = _cue_wave("rejected", 0.25)
-        with wave.open(BytesIO(accepted), "rb") as recording:
-            self.assertEqual(recording.getnchannels(), 1)
-            self.assertEqual(recording.getframerate(), 16_000)
-            self.assertLess(recording.getnframes(), 3_200)
+    def test_accepted_and_rejected_cues_are_short_mono_pcm(self) -> None:
+        accepted = _cue_pcm("accepted", 0.25)
+        rejected = _cue_pcm("rejected", 0.25)
+        self.assertLess(len(accepted), 6_400)
         self.assertGreater(len(rejected), len(accepted))
+        self.assertEqual(len(accepted) % 2, 0)
 
-    def test_player_receives_generated_wave(self) -> None:
+    def test_player_receives_generated_pcm(self) -> None:
         payloads: list[bytes] = []
         self.assertTrue(play_cue("accepted", volume=0.4, player=payloads.append))
-        self.assertEqual(payloads[0][:4], b"RIFF")
+        self.assertTrue(payloads[0])
+        self.assertNotEqual(payloads[0][:4], b"RIFF")
 
     def test_invalid_outcome_and_volume_are_rejected(self) -> None:
         with self.assertRaises(ValueError):

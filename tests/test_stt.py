@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import subprocess
 import tempfile
 import unittest
 
-from combatai.stt import MODEL_NAME, WhisperCpp
+from combatai.stt import MODEL_NAME, WhisperCpp, _multipart
 
 
 class SttTests(unittest.TestCase):
@@ -13,44 +12,33 @@ class SttTests(unittest.TestCase):
         recognizer = WhisperCpp(Path("test-root"), model_name="ggml-small.en.bin")
         self.assertEqual(recognizer.model.name, "ggml-small.en.bin")
 
-    def test_missing_installation_is_rejected(self) -> None:
+    def test_missing_worker_or_model_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             recognizer = WhisperCpp(Path(directory))
             with self.assertRaisesRegex(OSError, "setup-stt.bat"):
                 recognizer.validate()
 
-    def test_transcription_uses_pinned_local_files_and_deletes_audio(self) -> None:
-        calls: list[tuple[list[str], dict[str, object]]] = []
+    def test_worker_and_model_are_validated_without_temp_audio(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             stt = root / "stt"
             stt.mkdir()
-            (stt / "whisper-cli.exe").write_bytes(b"test")
+            (stt / "combatai-whisper.exe").write_bytes(b"test")
             (stt / MODEL_NAME).write_bytes(b"test")
+            WhisperCpp(root).validate()
+            self.assertEqual(list(root.glob("**/CombatAI-*.wav")), [])
 
-            def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-                calls.append((command, kwargs))
-                audio_path = Path(command[command.index("--file") + 1])
-                self.assertTrue(audio_path.is_file())
-                return subprocess.CompletedProcess(command, 0, " Contact air sea rescue.\n", "")
-
-            transcript = WhisperCpp(root, runner=runner).transcribe(
-                b"\x00\x00" * 160,
-                prompt="DCS radio vocabulary: Wingman, Biggin Hill.",
-            )
-
-        self.assertEqual(transcript, "Contact air sea rescue.")
-        self.assertEqual(len(calls), 1)
-        command, kwargs = calls[0]
-        self.assertIn("--no-gpu", command)
-        self.assertIn("--no-timestamps", command)
-        self.assertEqual(
-            command[command.index("--prompt") + 1],
-            "DCS radio vocabulary: Wingman, Biggin Hill.",
+    def test_multipart_frames_prompt_and_in_memory_wave(self) -> None:
+        body = _multipart(
+            "boundary",
+            {"response_format": "json", "prompt": "Wingman, Biggin Hill"},
+            "audio.wav",
+            b"RIFF-test",
         )
-        self.assertEqual(kwargs["cwd"], stt)
-        audio_path = Path(command[command.index("--file") + 1])
-        self.assertFalse(audio_path.exists())
+        self.assertIn(b'name="prompt"', body)
+        self.assertIn(b"Wingman, Biggin Hill", body)
+        self.assertIn(b"RIFF-test", body)
+        self.assertTrue(body.endswith(b"--boundary--\r\n"))
 
 
 if __name__ == "__main__":

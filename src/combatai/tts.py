@@ -1,32 +1,44 @@
-"""Short local speech output through the standalone Piper executable."""
+"""Interruptible local speech output through Piper raw PCM and SDL."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import os
 import subprocess
 import sys
-import tempfile
 import threading
+
+from .audio_output import AudioOutput
 
 
 class PiperSpeech:
-    """Synthesize short responses and play them asynchronously on Windows."""
+    """Synthesize responses off-thread and play PCM without temporary files."""
 
-    def __init__(self, executable: Path | None = None, model: Path | None = None) -> None:
+    def __init__(
+        self,
+        executable: Path | None = None,
+        model: Path | None = None,
+        *,
+        output_device: str | None = None,
+        length_scale: float = 0.80,
+        sentence_silence: float = 0.04,
+        output: AudioOutput | None = None,
+    ) -> None:
         root = Path(__file__).resolve().parents[2]
         self.executable = executable or Path(
             os.environ.get("COMBATAI_PIPER_EXE", root / "tools" / "piper" / "piper" / "piper.exe")
         )
         self.model = model or Path(
-            os.environ.get(
-                "COMBATAI_PIPER_MODEL",
-                root / "models" / "piper" / "en_GB-alan-medium.onnx",
-            )
+            os.environ.get("COMBATAI_PIPER_MODEL", root / "models" / "piper" / "en_GB-alan-medium.onnx")
         )
+        self.output = output or AudioOutput(output_device)
+        self.length_scale = float(length_scale)
+        self.sentence_silence = float(sentence_silence)
         self._last_text: str | None = None
-        self._last_wave: Path | None = None
         self._lock = threading.Lock()
+        self._process: subprocess.Popen[bytes] | None = None
+        self._generation = 0
 
     def validate(self) -> None:
         if sys.platform != "win32":
@@ -35,58 +47,67 @@ class PiperSpeech:
             raise OSError(f"Piper executable not found: {self.executable}. Run setup-tts.bat.")
         if not self.model.is_file():
             raise OSError(f"Piper voice model not found: {self.model}. Run setup-tts.bat.")
-        config = Path(str(self.model) + ".json")
-        if not config.is_file():
-            raise OSError(f"Piper voice configuration not found: {config}. Run setup-tts.bat.")
+        if not Path(str(self.model) + ".json").is_file():
+            raise OSError("Piper voice configuration is missing. Run setup-tts.bat.")
+        if not 0.60 <= self.length_scale <= 1.20:
+            raise ValueError("Piper length scale must be between 0.60 and 1.20")
 
     @property
     def last_text(self) -> str | None:
         return self._last_text
 
     def speak(self, text: str) -> None:
-        """Synthesize text, then begin asynchronous playback."""
         text = text.strip()
         if not text:
             return
         self.validate()
         self.stop()
-        fd, filename = tempfile.mkstemp(prefix="combatai-tts-", suffix=".wav")
-        os.close(fd)
-        wave_path = Path(filename)
-        try:
-            completed = subprocess.run(
-                [
-                    str(self.executable),
-                    "--model",
-                    str(self.model),
-                    "--output_file",
-                    str(wave_path),
-                    "--sentence_silence",
-                    "0.08",
-                    "--quiet",
-                ],
-                input=text + "\n",
-                text=True,
-                capture_output=True,
-                timeout=15.0,
-                check=False,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            if completed.returncode != 0 or not wave_path.is_file() or wave_path.stat().st_size < 44:
-                detail = completed.stderr.strip() or f"exit code {completed.returncode}"
-                raise OSError(f"Piper synthesis failed: {detail}")
-            import winsound
+        with self._lock:
+            self._last_text = text
+            self._generation += 1
+            generation = self._generation
+        threading.Thread(
+            target=self._synthesize,
+            args=(text, generation),
+            name="CombatAI-Piper",
+            daemon=True,
+        ).start()
 
-            with self._lock:
-                self._last_text = text
-                self._last_wave = wave_path
-                winsound.PlaySound(
-                    str(wave_path),
-                    winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
-                )
-        except Exception:
-            wave_path.unlink(missing_ok=True)
-            raise
+    def _synthesize(self, text: str, generation: int) -> None:
+        process = subprocess.Popen(
+            [
+                str(self.executable),
+                "--model", str(self.model),
+                "--output-raw",
+                "--length_scale", str(self.length_scale),
+                "--sentence_silence", str(self.sentence_silence),
+                "--quiet",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        with self._lock:
+            if generation != self._generation:
+                process.terminate()
+                return
+            self._process = process
+        pcm, error = process.communicate((text + "\n").encode("utf-8"))
+        with self._lock:
+            active = generation == self._generation
+            if self._process is process:
+                self._process = None
+        if not active:
+            return
+        if process.returncode != 0:
+            detail = error.decode("utf-8", "replace").strip() or f"exit code {process.returncode}"
+            raise OSError(f"Piper synthesis failed: {detail}")
+        self.output.play_pcm(pcm, sample_rate=self._sample_rate())
+
+    def _sample_rate(self) -> int:
+        config = json.loads(Path(str(self.model) + ".json").read_text(encoding="utf-8"))
+        return int(config["audio"]["sample_rate"])
 
     def repeat(self) -> bool:
         text = self.last_text
@@ -96,23 +117,17 @@ class PiperSpeech:
         return True
 
     def stop(self) -> None:
-        """Stop current playback immediately and retire its temporary WAV."""
-        if sys.platform == "win32":
-            import winsound
-
-            winsound.PlaySound(None, 0)
         with self._lock:
-            old_wave = self._last_wave
-            self._last_wave = None
-        if old_wave is not None:
-            try:
-                old_wave.unlink(missing_ok=True)
-            except OSError:
-                pass
+            self._generation += 1
+            process = self._process
+            self._process = None
+        if process is not None and process.poll() is None:
+            process.terminate()
+        self.output.stop()
 
 
 class InterruptingPushToTalk:
-    """Delegate PTT input while stopping speech at the instant PTT is pressed."""
+    """Delegate PTT input while stopping speech and synthesis on press."""
 
     def __init__(self, ptt: object, speech: PiperSpeech) -> None:
         self._ptt = ptt

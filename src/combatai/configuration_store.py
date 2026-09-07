@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-SCHEMA = 2
+SCHEMA = 3
 DEFAULT_MINIMUM_SCORE = 0.70
 DEFAULT_MINIMUM_LEAD = 0.10
 MINIMUM_SCORE_RANGE = (0.60, 0.95)
@@ -30,7 +30,8 @@ def default_document() -> dict[str, Any]:
             "minimum_score": DEFAULT_MINIMUM_SCORE,
             "minimum_lead": DEFAULT_MINIMUM_LEAD,
         },
-        "stt": {"model": "ggml-base.en.bin"},
+        "stt": {"model": "ggml-base.en.bin", "use_gpu": False},
+        "audio": {"output_device": None, "speech_length_scale": 0.80},
         "ptt": {"mode": "keyboard"},
         "feedback": {"audio_cues": True, "cue_volume": 0.25},
     }
@@ -53,6 +54,7 @@ def load_document(path: Path | None = None) -> dict[str, Any]:
     document["stt"] = _validated_stt(raw.get("stt"))
     document["ptt"] = _validated_ptt(raw.get("ptt"))
     document["feedback"] = _validated_feedback(raw.get("feedback"))
+    document["audio"] = _validated_audio(raw.get("audio"))
     return document
 
 
@@ -77,6 +79,7 @@ def load_document_from_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     result["stt"] = _validated_stt(value.get("stt"))
     result["ptt"] = _validated_ptt(value.get("ptt"))
     result["feedback"] = _validated_feedback(value.get("feedback"))
+    result["audio"] = _validated_audio(value.get("audio"))
     microphone = value.get("microphone")
     if microphone is not None and not isinstance(microphone, dict):
         raise ValueError("microphone must be an object")
@@ -89,6 +92,9 @@ def update_settings(
     minimum_score: float,
     minimum_lead: float,
     model: str,
+    use_gpu: bool,
+    output_device: str | None,
+    speech_length_scale: float,
     microphone: Mapping[str, Any] | None,
     audio_cues: bool,
     cue_volume: float,
@@ -98,7 +104,11 @@ def update_settings(
         "minimum_score": minimum_score,
         "minimum_lead": minimum_lead,
     }
-    updated["stt"] = {"model": model}
+    updated["stt"] = {"model": model, "use_gpu": use_gpu}
+    updated["audio"] = {
+        "output_device": output_device,
+        "speech_length_scale": speech_length_scale,
+    }
     updated["feedback"] = {"audio_cues": audio_cues, "cue_volume": cue_volume}
     if microphone is not None:
         updated["microphone"] = dict(microphone)
@@ -120,14 +130,31 @@ def _validated_matching(value: object) -> dict[str, float]:
     return {"minimum_score": score, "minimum_lead": lead}
 
 
-def _validated_stt(value: object) -> dict[str, str]:
+def _validated_stt(value: object) -> dict[str, Any]:
     source = value if isinstance(value, dict) else {}
     model = source.get("model", "ggml-base.en.bin")
     if not isinstance(model, str) or not model.startswith("ggml-") or not model.endswith(".bin"):
         raise ValueError("stt.model must be an installed ggml-*.bin filename")
     if Path(model).name != model:
         raise ValueError("stt.model must be a filename, not a path")
-    return {"model": model}
+    use_gpu = source.get("use_gpu", False)
+    if not isinstance(use_gpu, bool):
+        raise ValueError("stt.use_gpu must be true or false")
+    return {"model": model, "use_gpu": use_gpu}
+
+
+def _validated_audio(value: object) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    output_device = source.get("output_device")
+    if output_device is not None and (not isinstance(output_device, str) or not output_device):
+        raise ValueError("audio.output_device must be a device name or null")
+    speech_length_scale = _bounded_float(
+        source.get("speech_length_scale", 0.80), "speech_length_scale", 0.60, 1.20
+    )
+    return {
+        "output_device": output_device,
+        "speech_length_scale": speech_length_scale,
+    }
 
 
 def _validated_ptt(value: object) -> dict[str, Any]:

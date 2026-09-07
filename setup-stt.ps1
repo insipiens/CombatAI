@@ -1,136 +1,115 @@
+param(
+    [ValidateSet("base.en", "small.en", "medium.en")]
+    [string]$Model = "base.en"
+)
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$WhisperVersion = "b4938"
+$WhisperVersion = "v1.8.2"
 $WhisperArchive = "whisper-bin-x64.zip"
 $WhisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/download/$WhisperVersion/$WhisperArchive"
 $WhisperSha256 = "c2a4b60edb11f7e11a9191ffb50929535527d4d91c9903dbe3e554583bbbc63d"
-$ModelName = "ggml-base.en.bin"
-$ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${ModelName}?download=true"
-$ModelSha256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
-
+$Models = @{
+    "base.en" = @{
+        Name = "ggml-base.en.bin"
+        Sha256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
+        Size = "142 MiB"
+    }
+    "small.en" = @{
+        Name = "ggml-small.en.bin"
+        Sha256 = "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"
+        Size = "466 MiB"
+    }
+    "medium.en" = @{
+        Name = "ggml-medium.en.bin"
+        Sha256 = "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356"
+        Size = "1.5 GiB"
+    }
+}
+$Selected = $Models[$Model]
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SttDirectory = Join-Path $ProjectRoot "stt"
 $ManifestPath = Join-Path $SttDirectory "combatai-stt.json"
-$WhisperExe = Join-Path $SttDirectory "whisper-cli.exe"
-$ModelPath = Join-Path $SttDirectory $ModelName
+$WorkerExe = Join-Path $SttDirectory "combatai-whisper.exe"
+$ModelPath = Join-Path $SttDirectory $Selected.Name
+$ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$($Selected.Name)?download=true"
 
-function Test-WhisperExecutable([string]$Path) {
-    $StartInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $StartInfo.FileName = $Path
-    $StartInfo.Arguments = "--version"
-    $StartInfo.UseShellExecute = $false
-    $StartInfo.RedirectStandardOutput = $true
-    $StartInfo.RedirectStandardError = $true
-    $StartInfo.CreateNoWindow = $true
-    $Process = New-Object System.Diagnostics.Process
-    $Process.StartInfo = $StartInfo
-    try {
-        if (-not $Process.Start()) {
-            return $false
-        }
-        # Drain both redirected pipes concurrently. Reading them sequentially can
-        # deadlock when a native process fills the pipe that is not being read.
-        $StandardOutput = $Process.StandardOutput.ReadToEndAsync()
-        $StandardError = $Process.StandardError.ReadToEndAsync()
-        $Process.WaitForExit()
-        $null = $StandardOutput.Result
-        $null = $StandardError.Result
-        return $Process.ExitCode -eq 0
-    }
-    catch {
-        return $false
-    }
-    finally {
-        $Process.Dispose()
-    }
-}
-
-function Test-CombatAiStt {
-    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $WhisperExe -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $ModelPath -PathType Leaf)) {
-        return $false
-    }
-    try {
-        $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
-        if ($Manifest.whisper_version -ne $WhisperVersion -or
-            $Manifest.whisper_archive_sha256 -ne $WhisperSha256 -or
-            $Manifest.model_name -ne $ModelName -or
-            $Manifest.model_sha256 -ne $ModelSha256) {
-            return $false
-        }
-        if ((Get-FileHash -LiteralPath $ModelPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ModelSha256) {
-            return $false
-        }
-        return Test-WhisperExecutable $WhisperExe
-    }
-    catch {
-        return $false
-    }
-}
-
-if (Test-CombatAiStt) {
-    Write-Host "CombatAI local speech recognition is already ready."
-    exit 0
-}
-
-if (Test-Path -LiteralPath $SttDirectory) {
-    throw "The stt directory exists but failed validation: $SttDirectory`nMove it aside for inspection before running setup again."
+function Test-Worker([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $Process = Start-Process -FilePath $Path -ArgumentList "--version" -Wait -PassThru -NoNewWindow
+    return $Process.ExitCode -eq 0
 }
 
 $TemporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("CombatAI-STT-" + [guid]::NewGuid().ToString("N"))
-$ArchivePath = Join-Path $TemporaryRoot $WhisperArchive
-$ExpandedPath = Join-Path $TemporaryRoot "expanded"
-$StagingDirectory = Join-Path $ProjectRoot ("stt.new." + [guid]::NewGuid().ToString("N"))
-
 try {
-    New-Item -ItemType Directory -Path $TemporaryRoot | Out-Null
-    Write-Host "Downloading whisper.cpp $WhisperVersion for Windows x64..."
-    Invoke-WebRequest -Uri $WhisperUrl -OutFile $ArchivePath -UseBasicParsing
-    $ActualWhisperSha256 = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($ActualWhisperSha256 -ne $WhisperSha256) {
-        throw "whisper.cpp archive hash mismatch. Expected $WhisperSha256 but received $ActualWhisperSha256."
+    New-Item -ItemType Directory -Force -Path $SttDirectory, $TemporaryRoot | Out-Null
+
+    if (-not (Test-Worker $WorkerExe)) {
+        $ExistingServer = Join-Path $SttDirectory "whisper-server.exe"
+        if (Test-Path -LiteralPath $ExistingServer -PathType Leaf) {
+            Copy-Item -LiteralPath $ExistingServer -Destination $WorkerExe
+        }
+        else {
+            $ArchivePath = Join-Path $TemporaryRoot $WhisperArchive
+            $ExpandedPath = Join-Path $TemporaryRoot "expanded"
+            Write-Host "Downloading whisper.cpp $WhisperVersion native worker..."
+            Invoke-WebRequest -Uri $WhisperUrl -OutFile $ArchivePath -UseBasicParsing
+            $Actual = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($Actual -ne $WhisperSha256) {
+                throw "whisper.cpp archive hash mismatch. Expected $WhisperSha256 but received $Actual."
+            }
+            Expand-Archive -LiteralPath $ArchivePath -DestinationPath $ExpandedPath
+            $ReleasePath = Join-Path $ExpandedPath "Release"
+            if (-not (Test-Path -LiteralPath (Join-Path $ReleasePath "whisper-server.exe"))) {
+                throw "The verified whisper.cpp archive did not contain whisper-server.exe."
+            }
+            Copy-Item -Path (Join-Path $ReleasePath "*") -Destination $SttDirectory -Force
+            Copy-Item -LiteralPath (Join-Path $ReleasePath "whisper-server.exe") -Destination $WorkerExe -Force
+        }
+    }
+    if (-not (Test-Worker $WorkerExe)) {
+        throw "The CombatAI Whisper worker failed its self-test."
     }
 
-    Expand-Archive -LiteralPath $ArchivePath -DestinationPath $ExpandedPath
-    $ReleasePath = Join-Path $ExpandedPath "Release"
-    if (-not (Test-Path -LiteralPath (Join-Path $ReleasePath "whisper-cli.exe") -PathType Leaf)) {
-        throw "The verified whisper.cpp archive did not contain whisper-cli.exe."
+    $NeedsModel = -not (Test-Path -LiteralPath $ModelPath -PathType Leaf)
+    if (-not $NeedsModel) {
+        $NeedsModel = (Get-FileHash -LiteralPath $ModelPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Selected.Sha256
     }
-    Move-Item -LiteralPath $ReleasePath -Destination $StagingDirectory
-
-    Write-Host "Downloading the English base model (approximately 142 MiB)..."
-    $StagedModel = Join-Path $StagingDirectory $ModelName
-    Invoke-WebRequest -Uri $ModelUrl -OutFile $StagedModel -UseBasicParsing
-    $ActualModelSha256 = (Get-FileHash -LiteralPath $StagedModel -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($ActualModelSha256 -ne $ModelSha256) {
-        throw "Whisper model hash mismatch. Expected $ModelSha256 but received $ActualModelSha256."
+    if ($NeedsModel) {
+        $StagedModel = Join-Path $TemporaryRoot $Selected.Name
+        Write-Host "Downloading Whisper $Model model ($($Selected.Size))..."
+        Invoke-WebRequest -Uri $ModelUrl -OutFile $StagedModel -UseBasicParsing
+        $Actual = (Get-FileHash -LiteralPath $StagedModel -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($Actual -ne $Selected.Sha256) {
+            throw "Whisper model hash mismatch. Expected $($Selected.Sha256) but received $Actual."
+        }
+        Move-Item -LiteralPath $StagedModel -Destination $ModelPath -Force
     }
 
-    $Manifest = [ordered]@{
-        schema = 1
+    $InstalledModels = @{}
+    foreach ($Entry in $Models.GetEnumerator()) {
+        $Candidate = Join-Path $SttDirectory $Entry.Value.Name
+        if ((Test-Path -LiteralPath $Candidate -PathType Leaf) -and
+            (Get-FileHash -LiteralPath $Candidate -Algorithm SHA256).Hash.ToLowerInvariant() -eq $Entry.Value.Sha256) {
+            $InstalledModels[$Entry.Key] = $Entry.Value.Sha256
+        }
+    }
+    [ordered]@{
+        schema = 2
         whisper_version = $WhisperVersion
         whisper_archive_sha256 = $WhisperSha256
-        model_name = $ModelName
-        model_sha256 = $ModelSha256
+        worker = "combatai-whisper.exe"
+        models = $InstalledModels
         configured_at = [DateTime]::UtcNow.ToString("o")
-    }
-    $Manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $StagingDirectory "combatai-stt.json") -Encoding UTF8
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
 
-    $StagedExe = Join-Path $StagingDirectory "whisper-cli.exe"
-    if (-not (Test-WhisperExecutable $StagedExe)) {
-        throw "The extracted whisper.cpp executable failed its self-test."
-    }
-
-    Move-Item -LiteralPath $StagingDirectory -Destination $SttDirectory
     Write-Host "CombatAI local speech recognition is ready."
+    Write-Host "Worker: $WorkerExe"
+    Write-Host "Model:  $ModelPath"
 }
 finally {
     if (Test-Path -LiteralPath $TemporaryRoot) {
         Remove-Item -LiteralPath $TemporaryRoot -Recurse -Force
-    }
-    if (Test-Path -LiteralPath $StagingDirectory) {
-        Remove-Item -LiteralPath $StagingDirectory -Recurse -Force
     }
 }

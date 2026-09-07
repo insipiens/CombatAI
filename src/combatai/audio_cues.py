@@ -1,13 +1,12 @@
-"""Brief non-verbal acknowledgement cues through the Windows default output."""
+"""Brief non-verbal acknowledgement cues through the configured SDL output."""
 
 from __future__ import annotations
 
 from array import array
-from io import BytesIO
 import math
-import sys
 from typing import Callable
-import wave
+
+from .audio_output import AudioOutput
 
 
 SAMPLE_RATE = 16_000
@@ -18,27 +17,24 @@ def play_cue(
     *,
     volume: float = 0.25,
     player: Callable[[bytes], None] | None = None,
+    output: AudioOutput | None = None,
 ) -> bool:
     if outcome not in {"accepted", "rejected"}:
         raise ValueError("Cue outcome must be accepted or rejected")
     if not 0.0 <= volume <= 1.0:
         raise ValueError("Cue volume must be between zero and one")
-    payload = _cue_wave(outcome, volume)
+    payload = _cue_pcm(outcome, volume)
     try:
         if player is not None:
             player(payload)
         else:
-            if sys.platform != "win32":
-                return False
-            import winsound
-
-            winsound.PlaySound(payload, winsound.SND_MEMORY)
+            (output or AudioOutput()).play_pcm(payload, sample_rate=SAMPLE_RATE)
         return True
     except (OSError, RuntimeError):
         return False
 
 
-def _cue_wave(outcome: str, volume: float) -> bytes:
+def _cue_pcm(outcome: str, volume: float) -> bytes:
     samples = array("h")
     if outcome == "accepted":
         _append_tone(samples, frequency=880.0, seconds=0.09, volume=volume)
@@ -46,13 +42,7 @@ def _cue_wave(outcome: str, volume: float) -> bytes:
         _append_tone(samples, frequency=330.0, seconds=0.07, volume=volume)
         samples.extend([0] * round(SAMPLE_RATE * 0.05))
         _append_tone(samples, frequency=330.0, seconds=0.07, volume=volume)
-    output = BytesIO()
-    with wave.open(output, "wb") as recording:
-        recording.setnchannels(1)
-        recording.setsampwidth(2)
-        recording.setframerate(SAMPLE_RATE)
-        recording.writeframes(samples.tobytes())
-    return output.getvalue()
+    return samples.tobytes()
 
 
 def _append_tone(
