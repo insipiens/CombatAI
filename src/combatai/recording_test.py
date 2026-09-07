@@ -62,7 +62,8 @@ def _wav_bytes(pcm: bytes) -> bytes:
 def _play(pcm: bytes) -> None:
     import winsound
 
-    winsound.PlaySound(_wav_bytes(pcm), winsound.SND_MEMORY | winsound.SND_SYNC)
+    # PlaySound is synchronous unless SND_ASYNC is explicitly supplied.
+    winsound.PlaySound(_wav_bytes(pcm), winsound.SND_MEMORY)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

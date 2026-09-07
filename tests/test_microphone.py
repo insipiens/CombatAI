@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from io import BytesIO
 from pathlib import Path
+import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import wave
 
 from combatai.microphone import (
@@ -16,7 +19,7 @@ from combatai.microphone import (
     resolve_selection,
     save_selection,
 )
-from combatai.recording_test import _wav_bytes
+from combatai.recording_test import _play, _wav_bytes
 
 
 class MicrophoneTests(unittest.TestCase):
@@ -76,6 +79,17 @@ class MicrophoneTests(unittest.TestCase):
             self.assertEqual(recording.getsampwidth(), 2)
             self.assertEqual(recording.getframerate(), 16_000)
             self.assertEqual(recording.getnframes(), 160)
+
+    def test_playback_uses_memory_flag_and_default_synchronous_mode(self) -> None:
+        calls: list[tuple[bytes, int]] = []
+        fake_winsound = SimpleNamespace(
+            SND_MEMORY=4,
+            PlaySound=lambda payload, flags: calls.append((payload, flags)),
+        )
+        with patch.dict(sys.modules, {"winsound": fake_winsound}):
+            _play(b"\x00\x00" * 16)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1], fake_winsound.SND_MEMORY)
 
     def test_selection_round_trip_preserves_other_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
