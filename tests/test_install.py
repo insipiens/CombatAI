@@ -119,6 +119,17 @@ class InstallTests(unittest.TestCase):
         archives = list((self.saved / "Scripts" / "CombatAI").glob("install.migrated.*.json"))
         self.assertEqual(len(archives), 1)
 
+    def test_legacy_file_already_restored_by_vaicom_is_migrated(self) -> None:
+        vaicom_saved = b"-- VAICOM server-side script\n"
+        self._create_legacy_install(vaicom_saved)
+        self.saved_panel.write_bytes(vaicom_saved)
+
+        manifest = install_hook(self.dcs, self.saved, self.hook)
+
+        self.assertEqual(manifest["schema"], 2)
+        self.assertEqual(self.saved_panel.read_bytes(), vaicom_saved)
+        self.assertIn(HOOK, self.core.read_bytes())
+
     def test_legacy_status_is_not_reported_as_healthy(self) -> None:
         self._create_legacy_install(b"-- VAICOM server-side script\n")
 

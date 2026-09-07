@@ -278,21 +278,31 @@ def _remove_legacy_saved_games_install(
     if Path(manifest["target"]).resolve() != target.resolve():
         raise InstallError("Legacy manifest target is not the expected Saved Games panel")
     _validate_backup_location(backup, state_directory)
-    if not target.is_file() or file_hash(target) != manifest["installed_sha256"]:
-        raise InstallError(
-            "The legacy Saved Games radio-panel file has changed; refusing automatic migration"
-        )
     if not backup.is_file() or file_hash(backup) != manifest["base_sha256"]:
         raise InstallError(f"The recorded backup is missing or altered: {backup}")
 
-    if manifest["base_kind"] == "saved_games_override":
-        _copy_atomic(backup, target)
-        outcome = "restored_legacy_saved_games_override"
-    elif manifest["base_kind"] == "dcs_core":
-        target.unlink()
-        outcome = "removed_legacy_generated_override"
+    actual_sha256 = file_hash(target) if target.is_file() else None
+    if actual_sha256 == manifest["installed_sha256"]:
+        if manifest["base_kind"] == "saved_games_override":
+            _copy_atomic(backup, target)
+            outcome = "restored_legacy_saved_games_override"
+        elif manifest["base_kind"] == "dcs_core":
+            target.unlink()
+            outcome = "removed_legacy_generated_override"
+        else:
+            raise InstallError(f"Unknown legacy base kind: {manifest['base_kind']!r}")
+    elif (
+        manifest["base_kind"] == "saved_games_override"
+        and actual_sha256 == manifest["base_sha256"]
+    ):
+        outcome = "legacy_saved_games_override_already_restored"
+    elif manifest["base_kind"] == "dcs_core" and actual_sha256 is None:
+        outcome = "legacy_generated_override_already_removed"
     else:
-        raise InstallError(f"Unknown legacy base kind: {manifest['base_kind']!r}")
+        raise InstallError(
+            "The legacy Saved Games radio-panel file has changed to an unrecognised state; "
+            "refusing automatic migration"
+        )
 
     archive = _archive_manifest(manifest_path, state_directory, "migrated")
     return {"outcome": outcome, "manifest_archive": str(archive), "backup": str(backup)}
@@ -408,8 +418,19 @@ def _run_elevated(arguments: list[str]) -> int:
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
 
+    result_descriptor, result_name = tempfile.mkstemp(
+        prefix="CombatAI-elevated-", suffix=".txt"
+    )
+    os.close(result_descriptor)
+    result_path = Path(result_name)
     parameters = _windows_command_line(
-        [str(Path(__file__).resolve()), *arguments, "--elevated"]
+        [
+            str(Path(__file__).resolve()),
+            *arguments,
+            "--elevated",
+            "--result-file",
+            str(result_path),
+        ]
     )
     info = ShellExecuteInfo()
     info.cbSize = ctypes.sizeof(info)
@@ -420,21 +441,42 @@ def _run_elevated(arguments: list[str]) -> int:
     info.lpDirectory = str(Path(__file__).resolve().parents[1])
     info.nShow = 1  # SW_SHOWNORMAL
 
-    if not shell32.ShellExecuteExW(ctypes.byref(info)):
-        error = ctypes.get_last_error()
-        if error == 1223:
-            raise InstallError("Administrator permission was cancelled")
-        raise InstallError(f"Could not request administrator permission (Windows error {error})")
-
     try:
-        kernel32.WaitForSingleObject(info.hProcess, 0xFFFFFFFF)
+        if not shell32.ShellExecuteExW(ctypes.byref(info)):
+            error = ctypes.get_last_error()
+            if error == 1223:
+                raise InstallError("Administrator permission was cancelled")
+            raise InstallError(
+                f"Could not request administrator permission (Windows error {error})"
+            )
+
+        wait_result = kernel32.WaitForSingleObject(info.hProcess, 0xFFFFFFFF)
+        if wait_result == 0xFFFFFFFF:
+            error = ctypes.get_last_error()
+            raise InstallError(f"Could not wait for elevated installer (Windows error {error})")
         exit_code = wintypes.DWORD()
         if not kernel32.GetExitCodeProcess(info.hProcess, ctypes.byref(exit_code)):
             error = ctypes.get_last_error()
             raise InstallError(f"Could not read elevated installer result (Windows error {error})")
-        return int(exit_code.value)
+        code = int(exit_code.value)
+        output = result_path.read_text(encoding="utf-8") if result_path.stat().st_size else ""
+        if output:
+            print(output, end="", file=sys.stderr if code else sys.stdout)
+        return code
     finally:
-        kernel32.CloseHandle(info.hProcess)
+        if info.hProcess:
+            kernel32.CloseHandle(info.hProcess)
+        try:
+            result_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _emit_result(text: str, result_file: Path | None, *, error: bool = False) -> None:
+    if result_file is None:
+        print(text, file=sys.stderr if error else sys.stdout)
+        return
+    result_file.write_text(text + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -450,6 +492,7 @@ def main() -> int:
         default=Path(__file__).resolve().parents[1] / "dcs" / "CombatAI.radio_hook.lua",
     )
     install_parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
+    install_parser.add_argument("--result-file", type=Path, help=argparse.SUPPRESS)
 
     for name in ("status", "uninstall"):
         command_parser = commands.add_parser(name)
@@ -457,6 +500,7 @@ def main() -> int:
         command_parser.add_argument("--saved-games", type=Path)
         if name == "uninstall":
             command_parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
+            command_parser.add_argument("--result-file", type=Path, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
     try:
@@ -475,9 +519,14 @@ def main() -> int:
         else:
             result = installation_status(dcs_install, saved_games)
     except (InstallError, FileNotFoundError, PermissionError, ValueError) as exc:
-        print(f"CombatAI: {exc}", file=sys.stderr)
+        _emit_result(
+            f"CombatAI: {exc}", getattr(args, "result_file", None), error=True
+        )
         return 1
-    print(json.dumps(result, indent=2, sort_keys=True))
+    _emit_result(
+        json.dumps(result, indent=2, sort_keys=True),
+        getattr(args, "result_file", None),
+    )
     return 0
 
 
