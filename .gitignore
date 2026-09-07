@@ -9,3 +9,5 @@ config.json
 logs/
 runtime/
 runtime.new.*/
+tools/piper/
+models/piper/
