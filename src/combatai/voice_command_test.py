@@ -32,6 +32,7 @@ from .tts import InterruptingPushToTalk, PiperSpeech
 MINIMUM_EXECUTION_SCORE = 0.70
 MINIMUM_EXECUTION_LEAD = 0.10
 MINIMUM_ALIAS_CANDIDATE_SCORE = 0.50
+_SHORT_CAPTURE_ERROR = "No usable audio was captured;"
 
 
 def execution_candidate(
@@ -121,9 +122,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"\nCatalogue revision {snapshot.revision}: {len(snapshot.items)} commands")
                 print(f"Hold {ptt.label} and speak. Release it to execute a safe match.")
                 print("Press ESC while waiting to stop.\n")
-                pcm = capture_while_ptt(
-                    audio, microphone, ptt, maximum_seconds=args.maximum_seconds
-                )
+                try:
+                    pcm = capture_while_ptt(
+                        audio, microphone, ptt, maximum_seconds=args.maximum_seconds
+                    )
+                except OSError as exc:
+                    if not str(exc).startswith(_SHORT_CAPTURE_ERROR):
+                        raise
+                    print(f"\nIgnored short PTT press: {exc}")
+                    write_event(
+                        "command_rejected",
+                        reason="capture_too_short",
+                        revision=snapshot.revision,
+                        message=str(exc),
+                    )
+                    continue
 
                 print("Transcribing locally...", flush=True)
                 started = time.monotonic()
@@ -263,11 +276,50 @@ def main(argv: Sequence[str] | None = None) -> int:
                     average_dbfs=round(dbfs, 2) if dbfs is not None else None,
                     transcription_seconds=round(elapsed, 3),
                 )
-                request_id = client.execute(candidate.item.action_id, snapshot.revision)
+                active_candidate = candidate
+                active_revision = snapshot.revision
+                request_id = client.execute(active_candidate.item.action_id, active_revision)
                 result = client.wait_for_result(request_id)
+
+                if result is not None and not result.accepted and result.code == "stale_revision":
+                    refreshed = client.request_menu_and_wait(timeout=2.0)
+                    retry_candidate = None
+                    if refreshed is not None:
+                        retry_match = match_catalogue(transcript, refreshed.items)
+                        possible_retry = execution_candidate(
+                            retry_match,
+                            minimum_score=minimum_score,
+                            minimum_lead=minimum_lead,
+                        )
+                        if (
+                            possible_retry is not None
+                            and possible_retry.item.path == candidate.item.path
+                        ):
+                            retry_candidate = possible_retry
+
+                    if retry_candidate is not None and refreshed is not None:
+                        active_candidate = retry_candidate
+                        active_revision = refreshed.revision
+                        print(
+                            "DCS menu changed; revalidated the same command against "
+                            f"catalogue revision {active_revision}."
+                        )
+                        write_event(
+                            "command_revalidated",
+                            transcript=transcript,
+                            action=" > ".join(active_candidate.item.path),
+                            action_id=active_candidate.item.action_id,
+                            previous_revision=snapshot.revision,
+                            revision=active_revision,
+                        )
+                        request_id = client.execute(active_candidate.item.action_id, active_revision)
+                        result = client.wait_for_result(request_id)
+                    else:
+                        print("DCS menu changed and the command could not be safely revalidated.")
+
                 if result is None:
                     print("DCS did not acknowledge the command; execution state is unknown.")
-                    write_event("dcs_result", reason="timeout", action_id=candidate.item.action_id)
+                    write_event("dcs_result", reason="timeout", action_id=active_candidate.item.action_id)
                     if cues_enabled:
                         play_cue("rejected", volume=cue_volume)
                     continue
@@ -277,13 +329,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "dcs_result",
                         reason=result.code,
                         message=result.detail,
-                        action_id=candidate.item.action_id,
+                        action_id=active_candidate.item.action_id,
+                        revision=active_revision,
                     )
                     if cues_enabled:
                         play_cue("rejected", volume=cue_volume)
                     continue
                 print("DCS accepted the voice command.")
-                write_event("dcs_result", action_id=candidate.item.action_id, accepted=True)
+                write_event(
+                    "dcs_result",
+                    action_id=active_candidate.item.action_id,
+                    accepted=True,
+                    revision=active_revision,
+                )
                 if cues_enabled:
                     play_cue("accepted", volume=cue_volume)
                 wait_for_catalogue(client)
