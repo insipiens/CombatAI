@@ -9,6 +9,7 @@ import time
 from typing import Sequence
 
 from .dcs_client import DcsMenuClient
+from .audio_cues import play_cue
 from .configuration_store import load_document
 from .event_log import write_event
 from .hotas import HotasButton, SdlHotasInput, resolve_binding
@@ -75,8 +76,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         stt_settings = settings["stt"]
         matching_settings = settings["matching"]
         ptt_settings = settings["ptt"]
+        feedback_settings = settings["feedback"]
         minimum_score = float(matching_settings["minimum_score"])
         minimum_lead = float(matching_settings["minimum_lead"])
+        cues_enabled = bool(feedback_settings["audio_cues"])
+        cue_volume = float(feedback_settings["cue_volume"])
         recognizer = WhisperCpp(model_name=str(stt_settings["model"]))
         recognizer.validate()
         if ptt_settings["mode"] == "hotas":
@@ -98,6 +102,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             model=str(stt_settings["model"]),
             minimum_score=minimum_score,
             minimum_lead=minimum_lead,
+            audio_cues=cues_enabled,
+            cue_volume=cue_volume,
         )
         with DcsMenuClient() as client:
             wait_for_catalogue(client)
@@ -131,6 +137,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         average_dbfs=round(dbfs, 2) if dbfs is not None else None,
                         transcription_seconds=round(elapsed, 3),
                     )
+                    if cues_enabled:
+                        play_cue("rejected", volume=cue_volume)
                     continue
                 print(f"\nHeard: {transcript}")
                 print(f"Transcription time: {elapsed:.2f} seconds")
@@ -182,6 +190,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         average_dbfs=round(dbfs, 2) if dbfs is not None else None,
                         transcription_seconds=round(elapsed, 3),
                     )
+                    if cues_enabled:
+                        play_cue("rejected", volume=cue_volume)
                     continue
 
                 write_event(
@@ -201,6 +211,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if result is None:
                     print("DCS did not acknowledge the command; execution state is unknown.")
                     write_event("dcs_result", reason="timeout", action_id=candidate.item.action_id)
+                    if cues_enabled:
+                        play_cue("rejected", volume=cue_volume)
                     continue
                 if not result.accepted:
                     print(f"DCS rejected the command: {result.code}: {result.detail}")
@@ -210,9 +222,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                         message=result.detail,
                         action_id=candidate.item.action_id,
                     )
+                    if cues_enabled:
+                        play_cue("rejected", volume=cue_volume)
                     continue
                 print("DCS accepted the voice command.")
                 write_event("dcs_result", action_id=candidate.item.action_id, accepted=True)
+                if cues_enabled:
+                    play_cue("accepted", volume=cue_volume)
                 wait_for_catalogue(client)
     except KeyboardInterrupt:
         print("\nCancelled.")

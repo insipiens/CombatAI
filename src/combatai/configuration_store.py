@@ -13,6 +13,7 @@ DEFAULT_MINIMUM_SCORE = 0.70
 DEFAULT_MINIMUM_LEAD = 0.10
 MINIMUM_SCORE_RANGE = (0.60, 0.95)
 MINIMUM_LEAD_RANGE = (0.02, 0.30)
+CUE_VOLUME_RANGE = (0.05, 1.00)
 
 
 def config_path() -> Path:
@@ -31,6 +32,7 @@ def default_document() -> dict[str, Any]:
         },
         "stt": {"model": "ggml-base.en.bin"},
         "ptt": {"mode": "keyboard"},
+        "feedback": {"audio_cues": True, "cue_volume": 0.25},
     }
 
 
@@ -50,6 +52,7 @@ def load_document(path: Path | None = None) -> dict[str, Any]:
     document["matching"] = _validated_matching(raw.get("matching"))
     document["stt"] = _validated_stt(raw.get("stt"))
     document["ptt"] = _validated_ptt(raw.get("ptt"))
+    document["feedback"] = _validated_feedback(raw.get("feedback"))
     return document
 
 
@@ -73,6 +76,7 @@ def load_document_from_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     result["matching"] = _validated_matching(value.get("matching"))
     result["stt"] = _validated_stt(value.get("stt"))
     result["ptt"] = _validated_ptt(value.get("ptt"))
+    result["feedback"] = _validated_feedback(value.get("feedback"))
     microphone = value.get("microphone")
     if microphone is not None and not isinstance(microphone, dict):
         raise ValueError("microphone must be an object")
@@ -86,6 +90,8 @@ def update_settings(
     minimum_lead: float,
     model: str,
     microphone: Mapping[str, Any] | None,
+    audio_cues: bool,
+    cue_volume: float,
 ) -> dict[str, Any]:
     updated = dict(document)
     updated["matching"] = {
@@ -93,6 +99,7 @@ def update_settings(
         "minimum_lead": minimum_lead,
     }
     updated["stt"] = {"model": model}
+    updated["feedback"] = {"audio_cues": audio_cues, "cue_volume": cue_volume}
     if microphone is not None:
         updated["microphone"] = dict(microphone)
     return load_document_from_mapping(updated)
@@ -149,6 +156,17 @@ def _validated_ptt(value: object) -> dict[str, Any]:
         "guid": guid,
         "button": button,
     }
+
+
+def _validated_feedback(value: object) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    enabled = source.get("audio_cues", True)
+    if not isinstance(enabled, bool):
+        raise ValueError("feedback.audio_cues must be true or false")
+    volume = _bounded_float(
+        source.get("cue_volume", 0.25), "cue_volume", *CUE_VOLUME_RANGE
+    )
+    return {"audio_cues": enabled, "cue_volume": volume}
 
 
 def _bounded_float(value: object, name: str, lower: float, upper: float) -> float:

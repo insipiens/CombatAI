@@ -27,6 +27,7 @@ class ConfigurationStoreTests(unittest.TestCase):
         self.assertEqual(document["matching"]["minimum_score"], DEFAULT_MINIMUM_SCORE)
         self.assertEqual(document["matching"]["minimum_lead"], DEFAULT_MINIMUM_LEAD)
         self.assertEqual(document["ptt"], {"mode": "keyboard"})
+        self.assertEqual(document["feedback"], {"audio_cues": True, "cue_volume": 0.25})
 
     def test_hotas_binding_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

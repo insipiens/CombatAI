@@ -145,7 +145,8 @@ Open the local configuration front end:
 
 It opens `127.0.0.1:34385` in the default browser. The page selects and tests the recording
 device, configures the command-match floor and required lead over the runner-up, chooses among
-installed Whisper models, and learns a HOTAS button. HOTAS learning snapshots every attached
+installed Whisper models, configures short accepted/rejected audio cues, and learns a HOTAS
+button. HOTAS learning snapshots every attached
 SDL controller and assigns the first newly pressed button after setup starts; controls already
 held are ignored. Release completes the assignment, after which the page shows its live state.
 Space remains available alongside a configured HOTAS button.
@@ -158,6 +159,10 @@ CombatAI writes a readable rotating log and structured JSONL events beneath
 `%LOCALAPPDATA%\CombatAI\logs`. Voice events include the transcript, top candidates, scores,
 timings, selected action, menu revision, rejection reason, and DCS acknowledgement. Captured
 audio is not logged or retained.
+
+Audio feedback uses the current Windows default playback device. One brief high tone means DCS
+accepted the command; two brief low tones mean CombatAI refused it or DCS did not accept it.
+The front end can test both cues and adjust their volume or disable them entirely.
 
 Choose the microphone CombatAI will use:
 

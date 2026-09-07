@@ -13,6 +13,8 @@ class ConfigurationUiTests(unittest.TestCase):
         self.assertIn("Minimum lead over runner-up", PAGE)
         self.assertIn("Installed Whisper model", PAGE)
         self.assertIn("Recent activity", PAGE)
+        self.assertIn("Audio feedback", PAGE)
+        self.assertIn("Test accepted cue", PAGE)
         self.assertIn("__TOKEN__", PAGE)
 
 
