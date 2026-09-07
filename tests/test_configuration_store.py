@@ -22,24 +22,20 @@ class ConfigurationStoreTests(unittest.TestCase):
                 encoding="utf-8",
             )
             document = load_document(path)
-        self.assertEqual(document["schema"], 5)
+        self.assertEqual(document["schema"], 4)
         self.assertEqual(document["microphone"]["name"], "VR")
         self.assertEqual(document["matching"]["minimum_score"], DEFAULT_MINIMUM_SCORE)
         self.assertEqual(document["matching"]["minimum_lead"], DEFAULT_MINIMUM_LEAD)
         self.assertEqual(document["ptt"], {"mode": "keyboard"})
         self.assertEqual(document["feedback"], {"audio_cues": True, "cue_volume": 0.25})
         self.assertEqual(document["stt"]["use_gpu"], False)
-        self.assertEqual(document["audio"]["speech_length_scale"], 1.00)
+        self.assertEqual(document["audio"]["speech_length_scale"], 0.95)
 
-    def test_accelerated_defaults_are_migrated_to_standard_timing(self) -> None:
-        for schema, length_scale in ((3, 0.80), (4, 0.95)):
-            with self.subTest(schema=schema), tempfile.TemporaryDirectory() as directory:
-                path = Path(directory) / "config.json"
-                path.write_text(
-                    json.dumps({"schema": schema, "audio": {"output_device": None, "speech_length_scale": length_scale}}),
-                    encoding="utf-8",
-                )
-                self.assertEqual(load_document(path)["audio"]["speech_length_scale"], 1.00)
+    def test_schema_three_urgent_default_is_migrated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(json.dumps({"schema": 3, "audio": {"output_device": None, "speech_length_scale": 0.80}}), encoding="utf-8")
+            self.assertEqual(load_document(path)["audio"]["speech_length_scale"], 0.95)
 
     def test_audio_and_hotas_settings_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
