@@ -9,6 +9,23 @@ from combatai.dcs_client import DcsMenuClient
 
 
 class ClientTests(unittest.TestCase):
+    def test_windows_udp_reset_is_treated_as_no_message(self) -> None:
+        class ResetSocket:
+            def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
+                raise ConnectionResetError(10054, "forcibly closed by remote host")
+
+            def close(self) -> None:
+                pass
+
+        client = DcsMenuClient(listen_port=0)
+        real_socket = client._socket
+        client._socket = ResetSocket()  # type: ignore[assignment]
+        real_socket.close()
+        try:
+            self.assertIsNone(client.receive_once())
+        finally:
+            client.close()
+
     def test_retries_execute_with_same_request_id(self) -> None:
         server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server.bind(("127.0.0.1", 0))

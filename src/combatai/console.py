@@ -28,9 +28,13 @@ def main() -> int:
 
 
 def _run(client: DcsMenuClient) -> int:
-    if client.request_menu_and_wait(timeout=5.0) is None:
-        print("No reply from DCS. Is a mission running with the CombatAI hook installed?")
-        return 1
+    attempts = 0
+    while client.request_menu_and_wait(timeout=2.0) is None:
+        attempts += 1
+        if attempts == 1:
+            print("DCS is not responding yet. Start DCS and enter a mission; Ctrl+C stops CombatAI.")
+        elif attempts % 5 == 0:
+            print("Still waiting for an active DCS mission …")
 
     while True:
         snapshot = client.snapshot
