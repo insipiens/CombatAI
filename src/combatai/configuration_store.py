@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-SCHEMA = 3
+SCHEMA = 4
 DEFAULT_MINIMUM_SCORE = 0.70
 DEFAULT_MINIMUM_LEAD = 0.10
 MINIMUM_SCORE_RANGE = (0.60, 0.95)
 MINIMUM_LEAD_RANGE = (0.02, 0.30)
 CUE_VOLUME_RANGE = (0.05, 1.00)
+DEFAULT_SPEECH_LENGTH_SCALE = 0.95
 
 
 def config_path() -> Path:
@@ -31,7 +32,10 @@ def default_document() -> dict[str, Any]:
             "minimum_lead": DEFAULT_MINIMUM_LEAD,
         },
         "stt": {"model": "ggml-base.en.bin", "use_gpu": False},
-        "audio": {"output_device": None, "speech_length_scale": 0.80},
+        "audio": {
+            "output_device": None,
+            "speech_length_scale": DEFAULT_SPEECH_LENGTH_SCALE,
+        },
         "ptt": {"mode": "keyboard"},
         "feedback": {"audio_cues": True, "cue_volume": 0.25},
     }
@@ -55,6 +59,8 @@ def load_document(path: Path | None = None) -> dict[str, Any]:
     document["ptt"] = _validated_ptt(raw.get("ptt"))
     document["feedback"] = _validated_feedback(raw.get("feedback"))
     document["audio"] = _validated_audio(raw.get("audio"))
+    if raw.get("schema") == 3 and document["audio"]["speech_length_scale"] == 0.80:
+        document["audio"]["speech_length_scale"] = DEFAULT_SPEECH_LENGTH_SCALE
     return document
 
 
@@ -149,7 +155,7 @@ def _validated_audio(value: object) -> dict[str, Any]:
     if output_device is not None and (not isinstance(output_device, str) or not output_device):
         raise ValueError("audio.output_device must be a device name or null")
     speech_length_scale = _bounded_float(
-        source.get("speech_length_scale", 0.80), "speech_length_scale", 0.60, 1.20
+        source.get("speech_length_scale", DEFAULT_SPEECH_LENGTH_SCALE), "speech_length_scale", 0.60, 1.20
     )
     return {
         "output_device": output_device,

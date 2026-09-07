@@ -15,7 +15,7 @@ background thread. Pressing PTT terminates an active Piper process, stops SDL pl
 discards the interrupted PCM before microphone capture starts.
 
 The configuration page exposes the output device, a voice test, and Piper's
-`--length_scale`. The default is `0.80`; lower values speak faster. Sentence silence is
+`--length_scale`. The default is `0.95`; lower values speak faster. Configuration schema 4 migrates the earlier `0.80` default once because it made Alan sound unnaturally accelerated. Sentence silence is
 `0.04` seconds for concise cockpit responses.
 
 The model and configuration files remain under `models\piper`; the executable remains

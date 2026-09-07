@@ -8,6 +8,9 @@ from combatai.configuration_ui import PAGE
 class ConfigurationUiTests(unittest.TestCase):
     def test_page_exposes_required_setup_controls(self) -> None:
         for label in (
+            "Audio devices",
+            "Microphone input",
+            "Speech and cue output",
             "Recording device",
             "Learn a HOTAS button",
             "Minimum match",

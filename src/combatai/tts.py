@@ -21,7 +21,7 @@ class PiperSpeech:
         model: Path | None = None,
         *,
         output_device: str | None = None,
-        length_scale: float = 0.80,
+        length_scale: float = 0.95,
         sentence_silence: float = 0.04,
         output: AudioOutput | None = None,
     ) -> None:
