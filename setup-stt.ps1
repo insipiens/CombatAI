@@ -6,7 +6,7 @@ $WhisperArchive = "whisper-bin-x64.zip"
 $WhisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/download/$WhisperVersion/$WhisperArchive"
 $WhisperSha256 = "c2a4b60edb11f7e11a9191ffb50929535527d4d91c9903dbe3e554583bbbc63d"
 $ModelName = "ggml-base.en.bin"
-$ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$ModelName?download=true"
+$ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${ModelName}?download=true"
 $ModelSha256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path

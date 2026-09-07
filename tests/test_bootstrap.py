@@ -40,6 +40,8 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn('$WhisperVersion = "b4938"', setup)
         self.assertIn("whisper-bin-x64.zip", setup)
         self.assertIn("ggml-base.en.bin", setup)
+        self.assertIn("/${ModelName}?download=true", setup)
+        self.assertNotIn("/$ModelName?download=true", setup)
         self.assertGreaterEqual(setup.count("Get-FileHash"), 3)
         self.assertNotIn("pip", setup.lower())
 
