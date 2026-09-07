@@ -10,16 +10,18 @@ $Model = Join-Path $ModelDir 'en_GB-alan-medium.onnx'
 $Config = "$Model.json"
 
 $PiperUrl = 'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip'
-$ModelUrl = 'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/medium/en_GB-alan-medium.onnx?download=true'
-$ConfigUrl = 'https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_GB/alan/medium/en_GB-alan-medium.onnx.json?download=true'
+$VoiceRevision = 'b15880f5cbc33fcfc97938b1f72411dc770e5bc4'
+$VoiceBaseUrl = "https://huggingface.co/rhasspy/piper-voices/resolve/$VoiceRevision/en/en_GB/alan/medium"
+$ModelUrl = "$VoiceBaseUrl/en_GB-alan-medium.onnx?download=true"
+$ConfigUrl = "$VoiceBaseUrl/en_GB-alan-medium.onnx.json?download=true"
 $ModelMd5 = '8f6b35eeb8ef6269021c6cb6d2414c9b'
-$ConfigMd5 = '8927af81e8b16650fb7c9593464daa6e'
+$ConfigMd5 = 'b11d9afd0a8f5372c42a52fbd6e021d4'
 
 New-Item -ItemType Directory -Force -Path $PiperDir, $ModelDir | Out-Null
 
 if (-not (Test-Path $PiperExe)) {
     Write-Host 'Downloading the pinned standalone Piper Windows build...'
-    Invoke-WebRequest -Uri $PiperUrl -OutFile $Zip
+    Invoke-WebRequest -Uri $PiperUrl -OutFile $Zip -UseBasicParsing
     Expand-Archive -LiteralPath $Zip -DestinationPath $PiperDir -Force
     Remove-Item $Zip -Force
 }
@@ -30,14 +32,15 @@ function Get-Md5([string]$Path) {
 
 if (-not (Test-Path $Model) -or (Get-Md5 $Model) -ne $ModelMd5) {
     Write-Host 'Downloading the en_GB-alan-medium Piper voice...'
-    Invoke-WebRequest -Uri $ModelUrl -OutFile $Model
+    Invoke-WebRequest -Uri $ModelUrl -OutFile $Model -UseBasicParsing
 }
 if ((Get-Md5 $Model) -ne $ModelMd5) {
     throw 'Piper voice model failed its published MD5 check.'
 }
 
 if (-not (Test-Path $Config) -or (Get-Md5 $Config) -ne $ConfigMd5) {
-    Invoke-WebRequest -Uri $ConfigUrl -OutFile $Config
+    Write-Host 'Downloading the Piper voice configuration...'
+    Invoke-WebRequest -Uri $ConfigUrl -OutFile $Config -UseBasicParsing
 }
 if ((Get-Md5 $Config) -ne $ConfigMd5) {
     throw 'Piper voice configuration failed its published MD5 check.'
