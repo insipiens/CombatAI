@@ -46,6 +46,13 @@ class ConfigurationApplication:
         controllers = self.hotas.devices()
         models = {path.name for path in (PROJECT_ROOT / "stt").glob("ggml-*.bin")}
         models.add(str(document["stt"]["model"]))
+        compute = "cpu"
+        try:
+            manifest = json.loads((PROJECT_ROOT / "stt" / "combatai-stt.json").read_text(encoding="utf-8-sig"))
+            if isinstance(manifest, dict) and manifest.get("compute") == "cuda12":
+                compute = "cuda12"
+        except (OSError, json.JSONDecodeError):
+            pass
         return {
             "config": document,
             "config_path": str(config_path()),
@@ -53,6 +60,7 @@ class ConfigurationApplication:
             "microphones": [asdict(device) for device in self.audio.microphones()],
             "controllers": [asdict(device) for device in controllers],
             "outputs": AudioOutput.devices(),
+            "stt_compute": compute,
             "models": sorted(models),
             "score_range": MINIMUM_SCORE_RANGE,
             "lead_range": MINIMUM_LEAD_RANGE,
@@ -71,6 +79,8 @@ class ConfigurationApplication:
         available_models.add(str(load_document()["stt"]["model"]))
         if model not in available_models:
             raise ValueError("Select an installed Whisper model.")
+        if request.get("use_gpu") and self.status()["stt_compute"] != "cuda12":
+            raise ValueError("Install the CUDA worker before enabling GPU recognition.")
         output_device = request.get("output_device") or None
         if output_device is not None and output_device not in AudioOutput.devices():
             raise ValueError("Select a currently connected audio output.")
@@ -280,7 +290,7 @@ PAGE = r'''<!doctype html>
 <section class="card"><h2>Microphone</h2><label for="microphone">Recording device</label><select id="microphone"></select><button id="micTest">Run three-second level test</button><div id="micResult" class="status">No test run.</div></section>
 <section class="card"><h2>Push to talk</h2><div id="pttCurrent" class="status">Loading…</div><div id="controllers" class="hint"></div><button id="learnPtt" class="primary">Learn a HOTAS button</button><button id="keyboardPtt">Use Space only</button><div class="hint">Learning ignores controls already held when scanning starts. Press and release the desired button.</div></section>
 <section class="card"><h2>Command matching</h2><label>Minimum match <span id="scoreValue" class="value"></span></label><input id="score" type="range" step="0.01"><label>Minimum lead over runner-up <span id="leadValue" class="value"></span></label><input id="lead" type="range" step="0.01"><div class="hint">Both conditions must pass before a command is sent.</div></section>
-<section class="card"><h2>Speech recognition</h2><label for="model">Installed Whisper model</label><select id="model"></select><label><input id="useGpu" type="checkbox"> Use GPU acceleration (experimental)</label><div class="hint">Install another model with setup-stt.bat small.en or medium.en. Live DCS vocabulary prompting remains enabled.</div><h2 style="margin-top:24px">Audio output</h2><label for="output">Playback device</label><select id="output"></select><label>Speech pace <span id="paceValue" class="value"></span></label><input id="speechPace" type="range" min="0.60" max="1.20" step="0.02"><div class="hint">Lower values speak faster. 0.80 is the brisk default.</div><button id="testVoice">Test Alan voice</button><h2 style="margin-top:24px">Audio feedback</h2><label><input id="audioCues" type="checkbox"> Play accepted and rejected cues</label><label>Cue volume <span id="cueValue" class="value"></span></label><input id="cueVolume" type="range" step="0.05"><button id="testAccepted">Test accepted cue</button><button id="testRejected">Test rejected cue</button></section>
+<section class="card"><h2>Speech recognition</h2><label for="model">Installed Whisper model</label><select id="model"></select><label><input id="useGpu" type="checkbox"> Use GPU acceleration (experimental)</label><div class="hint">Install another model with setup-stt.bat small.en or medium.en. Install the optional CUDA worker with setup-stt.bat base.en cuda12. Live DCS vocabulary prompting remains enabled.</div><h2 style="margin-top:24px">Audio output</h2><label for="output">Playback device</label><select id="output"></select><label>Speech pace <span id="paceValue" class="value"></span></label><input id="speechPace" type="range" min="0.60" max="1.20" step="0.02"><div class="hint">Lower values speak faster. 0.80 is the brisk default.</div><button id="testVoice">Test Alan voice</button><h2 style="margin-top:24px">Audio feedback</h2><label><input id="audioCues" type="checkbox"> Play accepted and rejected cues</label><label>Cue volume <span id="cueValue" class="value"></span></label><input id="cueVolume" type="range" step="0.05"><button id="testAccepted">Test accepted cue</button><button id="testRejected">Test rejected cue</button></section>
 <section class="card wide"><button id="save" class="primary">Save configuration</button><div id="saveResult" class="status">No unsaved changes.</div><div id="paths" class="paths"></div></section>
 <section class="card wide"><h2>Recent activity</h2><div id="logs" class="log">No events yet.</div></section>
 </div></main><script>
@@ -288,7 +298,7 @@ const token='__TOKEN__';let state=null;let learning=false;
 const $=id=>document.getElementById(id);const pct=n=>Math.round(n*100)+'%';
 async function api(path,body){const options=body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CombatAI-Token':token},body:JSON.stringify(body)};const response=await fetch(path,options);const value=await response.json();if(!response.ok)throw new Error(value.error||'Request failed');return value}
 function option(select,value,label){const node=document.createElement('option');node.value=value;node.textContent=label;select.appendChild(node)}
-function render(s){state=s;const c=s.config;$('microphone').innerHTML='';s.microphones.forEach(m=>option($('microphone'),m.device_id,m.name));if(c.microphone)$('microphone').value=c.microphone.device_id;$('score').min=s.score_range[0];$('score').max=s.score_range[1];$('score').value=c.matching.minimum_score;$('lead').min=s.lead_range[0];$('lead').max=s.lead_range[1];$('lead').value=c.matching.minimum_lead;$('audioCues').checked=c.feedback.audio_cues;$('cueVolume').min=s.cue_volume_range[0];$('cueVolume').max=s.cue_volume_range[1];$('cueVolume').value=c.feedback.cue_volume;$('model').innerHTML='';s.models.forEach(m=>option($('model'),m,m));$('model').value=c.stt.model;$('useGpu').checked=c.stt.use_gpu;$('output').innerHTML='';option($('output'),'','Windows default');s.outputs.forEach(d=>option($('output'),d,d));$('output').value=c.audio.output_device||'';$('speechPace').value=c.audio.speech_length_scale;values();const p=c.ptt;$('pttCurrent').textContent=p.mode==='hotas'?`${p.name} — button ${p.button}`:'Space keyboard';$('controllers').textContent=s.controllers.length?s.controllers.map(d=>`${d.name} (${d.button_count} buttons)`).join(' · '):'No SDL controllers detected.';$('paths').textContent=`Configuration: ${s.config_path} · Logs: ${s.log_path}`;renderLogs(s.events)}
+function render(s){state=s;const c=s.config;$('microphone').innerHTML='';s.microphones.forEach(m=>option($('microphone'),m.device_id,m.name));if(c.microphone)$('microphone').value=c.microphone.device_id;$('score').min=s.score_range[0];$('score').max=s.score_range[1];$('score').value=c.matching.minimum_score;$('lead').min=s.lead_range[0];$('lead').max=s.lead_range[1];$('lead').value=c.matching.minimum_lead;$('audioCues').checked=c.feedback.audio_cues;$('cueVolume').min=s.cue_volume_range[0];$('cueVolume').max=s.cue_volume_range[1];$('cueVolume').value=c.feedback.cue_volume;$('model').innerHTML='';s.models.forEach(m=>option($('model'),m,m));$('model').value=c.stt.model;$('useGpu').checked=c.stt.use_gpu&&s.stt_compute==='cuda12';$('useGpu').disabled=s.stt_compute!=='cuda12';$('output').innerHTML='';option($('output'),'','Windows default');s.outputs.forEach(d=>option($('output'),d,d));$('output').value=c.audio.output_device||'';$('speechPace').value=c.audio.speech_length_scale;values();const p=c.ptt;$('pttCurrent').textContent=p.mode==='hotas'?`${p.name} — button ${p.button}`:'Space keyboard';$('controllers').textContent=s.controllers.length?s.controllers.map(d=>`${d.name} (${d.button_count} buttons)`).join(' · '):'No SDL controllers detected.';$('paths').textContent=`Configuration: ${s.config_path} · Logs: ${s.log_path}`;renderLogs(s.events)}
 function values(){$('scoreValue').textContent=pct(+$('score').value);$('leadValue').textContent=pct(+$('lead').value);$('cueValue').textContent=pct(+$('cueVolume').value);$('paceValue').textContent=(+$('speechPace').value).toFixed(2)}
 function renderLogs(events){const box=$('logs');box.innerHTML='';if(!events.length){box.textContent='No events yet.';return}events.slice().reverse().forEach(e=>{const row=document.createElement('div');row.textContent=`${e.timestamp||''}  ${e.event||''}  ${e.transcript||e.message||e.reason||''}`;box.appendChild(row)})}
 async function load(){try{render(await api('/api/status'))}catch(e){$('saveResult').textContent=e.message;$('saveResult').classList.add('error')}}

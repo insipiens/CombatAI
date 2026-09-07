@@ -50,6 +50,8 @@ class BootstrapTests(unittest.TestCase):
         setup = (ROOT / "setup-stt.ps1").read_text(encoding="utf-8")
         self.assertIn('$WhisperVersion = "b4938"', setup)
         self.assertIn("whisper-bin-x64.zip", setup)
+        self.assertIn("whisper-cublas-12.4.0-bin-x64.zip", setup)
+        self.assertIn('[ValidateSet("cpu", "cuda12")]', setup)
         self.assertIn("combatai-whisper.exe", setup)
         self.assertIn("whisper-server.exe", setup)
         self.assertIn("ggml-base.en.bin", setup)

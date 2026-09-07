@@ -56,6 +56,9 @@ when you want to compare it:
 ```powershell
 .\setup-stt.bat small.en
 .\setup-stt.bat medium.en
+
+# Optional NVIDIA CUDA 12 worker; CPU remains the default
+.\setup-stt.bat base.en cuda12
 ```
 
 Only the requested model is downloaded. Installed models appear in the configuration page.
@@ -107,9 +110,9 @@ Open the local configuration page:
 
 The page is served only on `127.0.0.1:34385`. It configures and tests the microphone,
 audio output, Alan speech pace, accepted/rejected cues, installed Whisper model, matching
-thresholds, and HOTAS PTT binding. GPU recognition is exposed as an experimental option so
-its latency and resource impact can be measured on the target machine; CPU remains the
-default.
+thresholds, and HOTAS PTT binding. GPU recognition becomes available only after the pinned CUDA 12 worker is installed. It is
+experimental so its latency and DCS resource impact can be measured on the target machine;
+CPU remains the default.
 
 Settings are stored in `%LOCALAPPDATA%\CombatAI\config.json`. Logs are stored beneath
 `%LOCALAPPDATA%\CombatAI\logs`. JSONL recognition events include the model, CPU/GPU

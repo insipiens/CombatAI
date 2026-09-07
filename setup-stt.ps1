@@ -1,15 +1,28 @@
 param(
     [ValidateSet("base.en", "small.en", "medium.en")]
-    [string]$Model = "base.en"
+    [string]$Model = "base.en",
+    [ValidateSet("cpu", "cuda12")]
+    [string]$Compute = "cpu"
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $WhisperVersion = "b4938"
-$WhisperArchive = "whisper-bin-x64.zip"
+$Archives = @{
+    "cpu" = @{
+        Name = "whisper-bin-x64.zip"
+        Sha256 = "c2a4b60edb11f7e11a9191ffb50929535527d4d91c9903dbe3e554583bbbc63d"
+    }
+    "cuda12" = @{
+        Name = "whisper-cublas-12.4.0-bin-x64.zip"
+        Sha256 = "c1b17166e1e31a91cc8e9c1f910d3785e3ce757bb2958bf9dce13fdb4880005f"
+    }
+}
+$SelectedArchive = $Archives[$Compute]
+$WhisperArchive = $SelectedArchive.Name
 $WhisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/download/$WhisperVersion/$WhisperArchive"
-$WhisperSha256 = "c2a4b60edb11f7e11a9191ffb50929535527d4d91c9903dbe3e554583bbbc63d"
+$WhisperSha256 = $SelectedArchive.Sha256
 $Models = @{
     "base.en" = @{
         Name = "ggml-base.en.bin"
@@ -63,9 +76,16 @@ $TemporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("CombatAI-STT-" + 
 try {
     New-Item -ItemType Directory -Force -Path $SttDirectory, $TemporaryRoot | Out-Null
 
-    if (-not (Test-Worker $WorkerExe)) {
+    $InstalledCompute = $null
+    if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
+        try { $InstalledCompute = (Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json).compute }
+        catch { $InstalledCompute = $null }
+    }
+    $NeedsWorker = -not (Test-Worker $WorkerExe) -or $InstalledCompute -ne $Compute
+    if ($NeedsWorker) {
         $ExistingServer = Join-Path $SttDirectory "whisper-server.exe"
-        if (Test-Path -LiteralPath $ExistingServer -PathType Leaf) {
+        if ($Compute -eq "cpu" -and $null -eq $InstalledCompute -and
+            (Test-Path -LiteralPath $ExistingServer -PathType Leaf)) {
             Copy-Item -LiteralPath $ExistingServer -Destination $WorkerExe
         }
         else {
@@ -118,6 +138,7 @@ try {
         whisper_version = $WhisperVersion
         whisper_archive_sha256 = $WhisperSha256
         worker = "combatai-whisper.exe"
+        compute = $Compute
         models = $InstalledModels
         configured_at = [DateTime]::UtcNow.ToString("o")
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
@@ -125,6 +146,7 @@ try {
     Write-Host "CombatAI local speech recognition is ready."
     Write-Host "Worker: $WorkerExe"
     Write-Host "Model:  $ModelPath"
+    Write-Host "Compute: $Compute"
 }
 finally {
     if (Test-Path -LiteralPath $TemporaryRoot) {
