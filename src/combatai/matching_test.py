@@ -7,6 +7,7 @@ import sys
 import time
 from typing import Sequence
 
+from .configuration_store import load_document
 from .dcs_client import DcsMenuClient
 from .matcher import MatchResult, build_vocabulary_prompt, match_catalogue
 from .microphone import WinMmAudioInput, load_selection, resolve_selection
@@ -27,8 +28,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         audio = WinMmAudioInput()
         microphone = resolve_selection(audio.microphones(), load_selection())
         keys = WindowsKeys()
-        recognizer = WhisperCpp()
-        recognizer.validate()
+        stt_settings = load_document()["stt"]
+        recognizer = WhisperCpp(
+            model_name=str(stt_settings["model"]),
+            use_gpu=bool(stt_settings["use_gpu"]),
+        )
+        recognizer.start()
 
         print("CombatAI live command-matching test")
         print(f"Microphone: {microphone.name}")

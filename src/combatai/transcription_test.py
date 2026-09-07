@@ -7,6 +7,7 @@ import sys
 import time
 from typing import Sequence
 
+from .configuration_store import load_document
 from .microphone import WinMmAudioInput, load_selection, resolve_selection
 from .recording_test import WindowsKeys, capture_while_space
 from .stt import WhisperCpp
@@ -25,12 +26,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         audio = WinMmAudioInput()
         microphone = resolve_selection(audio.microphones(), load_selection())
         keys = WindowsKeys()
-        recognizer = WhisperCpp()
-        recognizer.validate()
+        stt_settings = load_document()["stt"]
+        recognizer = WhisperCpp(
+            model_name=str(stt_settings["model"]),
+            use_gpu=bool(stt_settings["use_gpu"]),
+        )
+        recognizer.start()
 
         print("CombatAI local transcription test")
         print(f"Microphone: {microphone.name}")
-        print("Model: Whisper base.en (CPU)")
+        print(
+            f"Model: {recognizer.model.name} "
+            f"({'GPU' if recognizer.use_gpu else 'CPU'})"
+        )
         print("\nHold SPACE and speak. Release SPACE to transcribe.")
         print("Press ESC before recording to cancel.\n")
 
@@ -46,6 +54,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             print("\nNo speech was recognised.")
         print(f"Transcription time: {elapsed:.2f} seconds")
+        metrics = recognizer.last_metrics
+        print(f"Real-time factor: {metrics['real_time_factor']:.3f}")
         return 0
     except KeyboardInterrupt:
         print("\nCancelled.")

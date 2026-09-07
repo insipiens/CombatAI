@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$WhisperVersion = "v1.8.2"
+$WhisperVersion = "b4938"
 $WhisperArchive = "whisper-bin-x64.zip"
 $WhisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/download/$WhisperVersion/$WhisperArchive"
 $WhisperSha256 = "c2a4b60edb11f7e11a9191ffb50929535527d4d91c9903dbe3e554583bbbc63d"
@@ -37,8 +37,26 @@ $ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$($Select
 
 function Test-Worker([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
-    $Process = Start-Process -FilePath $Path -ArgumentList "--version" -Wait -PassThru -NoNewWindow
-    return $Process.ExitCode -eq 0
+    $StartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $StartInfo.FileName = $Path
+    $StartInfo.Arguments = "--version"
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+    $StartInfo.CreateNoWindow = $true
+    $Process = New-Object System.Diagnostics.Process
+    $Process.StartInfo = $StartInfo
+    try {
+        if (-not $Process.Start()) { return $false }
+        $StandardOutput = $Process.StandardOutput.ReadToEndAsync()
+        $StandardError = $Process.StandardError.ReadToEndAsync()
+        $Process.WaitForExit()
+        $null = $StandardOutput.Result
+        $null = $StandardError.Result
+        return $Process.ExitCode -eq 0
+    }
+    catch { return $false }
+    finally { $Process.Dispose() }
 }
 
 $TemporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("CombatAI-STT-" + [guid]::NewGuid().ToString("N"))

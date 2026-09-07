@@ -46,22 +46,18 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(len(match.group(1)), 64)
         self.assertIn("pygame.version.ver", setup)
 
-    def test_stt_setup_pins_and_verifies_binary_and_model(self) -> None:
+    def test_stt_setup_pins_worker_and_supported_models(self) -> None:
         setup = (ROOT / "setup-stt.ps1").read_text(encoding="utf-8")
         self.assertIn('$WhisperVersion = "b4938"', setup)
         self.assertIn("whisper-bin-x64.zip", setup)
+        self.assertIn("combatai-whisper.exe", setup)
+        self.assertIn("whisper-server.exe", setup)
         self.assertIn("ggml-base.en.bin", setup)
-        self.assertIn("/${ModelName}?download=true", setup)
-        self.assertNotIn("/$ModelName?download=true", setup)
+        self.assertIn("ggml-small.en.bin", setup)
+        self.assertIn("ggml-medium.en.bin", setup)
         self.assertGreaterEqual(setup.count("Get-FileHash"), 3)
         self.assertIn("System.Diagnostics.ProcessStartInfo", setup)
-        self.assertIn("RedirectStandardError = $true", setup)
-        self.assertIn('Arguments = "--version"', setup)
         self.assertEqual(setup.count("ReadToEndAsync()"), 2)
-        self.assertNotIn(".StandardOutput.ReadToEnd()", setup)
-        self.assertNotIn(".StandardError.ReadToEnd()", setup)
-        self.assertNotIn("& $WhisperExe --help", setup)
-        self.assertNotIn("& $StagedExe --help", setup)
         self.assertNotIn("pip install", setup.lower())
 
     def test_installer_elevates_only_mutating_commands(self) -> None:

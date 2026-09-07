@@ -1,48 +1,22 @@
-# Piper spoken command reference
+# Piper speech in CombatAI
 
-CombatAI includes short local speech output and application-side spoken queries over the live DCS radio hierarchy.
+CombatAI uses the pinned standalone Piper Windows executable and the
+`en_GB-alan-medium` voice. Setup downloads both from their upstream open-source releases
+and verifies them before use.
 
-## Setup
+The live path is entirely in memory:
 
-From PowerShell, run the normal CombatAI setup:
-
-```powershell
-.\setup.bat
+```text
+response text -> piper.exe --output-raw -> PCM memory -> pygame-ce/SDL -> selected output
 ```
 
-`setup.bat` is idempotent and prepares the private Python/SDL runtime, local whisper.cpp speech recognition, and Piper speech output. `setup-tts.bat` remains available as a TTS-only diagnostic/setup command:
+Piper runs once per response so an utterance has an unambiguous end. Synthesis runs on a
+background thread. Pressing PTT terminates an active Piper process, stops SDL playback, and
+discards the interrupted PCM before microphone capture starts.
 
-```powershell
-.\setup-tts.bat
-```
+The configuration page exposes the output device, a voice test, and Piper's
+`--length_scale`. The default is `0.80`; lower values speak faster. Sentence silence is
+`0.04` seconds for concise cockpit responses.
 
-The TTS setup downloads the standalone Windows Piper build from the archived MIT-licensed `rhasspy/piper` release `2023.11.14-2`, plus a revision-pinned `en_GB-alan-medium` voice and config from `rhasspy/piper-voices`. The published voice-file MD5 values are checked after download.
-
-The Piper release itself did not publish a digest for the Windows ZIP, so the binary archive cannot currently receive the same checksum verification used by CombatAI's Python and pygame bootstrap. This should be resolved before packaging a release.
-
-Then run the live voice-command test:
-
-```powershell
-.\voice-command-test.bat
-```
-
-## Spoken application commands
-
-These commands are handled by CombatAI and do not select anything in DCS:
-
-- `List ATC commands`
-- `List wingman commands`
-- `List F10 commands`
-- `List <any known menu node> commands`
-- `Repeat`
-- `Repeat please`
-- `Say again`
-- `Say again please`
-
-A list query reconstructs the hierarchy from the flattened live DCS paths and speaks only the immediate children of the requested node. Responses are intentionally terse.
-
-Pressing the configured HOTAS PTT (or Space in the development test) stops current Piper playback immediately before recording the new utterance.
-
-Rejected near-matches with a plausible candidate are added to `%LOCALAPPDATA%\CombatAI\pending_aliases.json` as null mappings for later human review. They are never activated automatically.
-
-Existing JSONL event logging records the meta-command, resolved node, children and spoken response during development.
+The model and configuration files remain under `models\piper`; the executable remains
+under `tools\piper`. No Python package, cloud request, or temporary WAV is involved.
