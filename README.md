@@ -195,6 +195,10 @@ missing action is refused. The process waits for a mission, then remains active 
 commands until Escape or Ctrl+C. Each accepted command executes immediately after recognition
 without asking for confirmation.
 
+Before each transcription, CombatAI supplies whisper.cpp with a bounded, deduplicated vocabulary
+prompt generated from the current live catalogue. This biases recognition toward current
+recipient, airfield, command, and F10 names without rewriting particular transcription mistakes.
+
 Start the Windows-side listener before entering a DCS mission:
 
 ```powershell

@@ -5,7 +5,13 @@ import io
 from pathlib import Path
 import unittest
 
-from combatai.matcher import MatchResult, RankedMatch, match_catalogue, normalize_phrase
+from combatai.matcher import (
+    MatchResult,
+    RankedMatch,
+    build_vocabulary_prompt,
+    match_catalogue,
+    normalize_phrase,
+)
 from combatai.protocol import MenuItem
 from combatai.voice_command_test import (
     MINIMUM_EXECUTION_SCORE,
@@ -68,20 +74,36 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "f10.10.1")  # type: ignore[union-attr]
 
-    def test_observed_whisper_biggin_hill_substitution_matches(self) -> None:
+    def test_observed_biggin_hill_error_uses_full_path_evidence(self) -> None:
         result = match_catalogue("Begin hill, request startup", ITEMS)
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "radio.5.1.1")  # type: ignore[union-attr]
+        self.assertGreaterEqual(result.best.score, MINIMUM_EXECUTION_SCORE)  # type: ignore[union-attr]
 
-    def test_observed_whisper_wingman_substitution_matches(self) -> None:
+    def test_observed_wingman_error_finds_best_path_without_rewriting(self) -> None:
         result = match_catalogue("Women break left", ITEMS)
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "radio.1.4.2")  # type: ignore[union-attr]
+        self.assertLess(result.best.score, MINIMUM_EXECUTION_SCORE)  # type: ignore[union-attr]
 
-    def test_observed_whisper_air_sea_substitution_matches(self) -> None:
+    def test_observed_air_sea_error_finds_best_path_without_rewriting(self) -> None:
         result = match_catalogue("Contact SC Rescue", ITEMS)
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "f10.10.1")  # type: ignore[union-attr]
+        self.assertLess(result.best.score, MINIMUM_EXECUTION_SCORE)  # type: ignore[union-attr]
+
+    def test_live_vocabulary_prompt_prioritizes_path_levels_and_deduplicates(self) -> None:
+        prompt = build_vocabulary_prompt(ITEMS)
+        self.assertTrue(prompt.startswith("DCS radio command vocabulary:"))
+        self.assertIn("Wingman", prompt)
+        self.assertIn("Biggin Hill", prompt)
+        self.assertIn("Contact Air Sea Rescue", prompt)
+        self.assertEqual(prompt.count("Break Left"), 1)
+
+    def test_live_vocabulary_prompt_respects_length_limit(self) -> None:
+        prompt = build_vocabulary_prompt(ITEMS, maximum_characters=80)
+        self.assertLessEqual(len(prompt), 80)
+        self.assertTrue(prompt.endswith("."))
 
     def test_unrelated_speech_does_not_match(self) -> None:
         result = match_catalogue("What is the weather tomorrow", ITEMS)

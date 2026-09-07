@@ -8,7 +8,7 @@ import time
 from typing import Sequence
 
 from .dcs_client import DcsMenuClient
-from .matcher import MatchResult, RankedMatch, match_catalogue
+from .matcher import MatchResult, RankedMatch, build_vocabulary_prompt, match_catalogue
 from .matching_test import _print_result
 from .microphone import WinMmAudioInput, load_selection, resolve_selection
 from .recording_test import WindowsKeys, capture_while_space
@@ -71,7 +71,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 print("Transcribing locally...", flush=True)
                 started = time.monotonic()
-                transcript = recognizer.transcribe(pcm)
+                transcript = recognizer.transcribe(
+                    pcm,
+                    prompt=build_vocabulary_prompt(snapshot.items),
+                )
                 elapsed = time.monotonic() - started
                 if not transcript:
                     print("\nNo speech was recognised. Nothing was sent to DCS.")

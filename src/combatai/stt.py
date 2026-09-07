@@ -34,7 +34,7 @@ class WhisperCpp:
                 "Local speech recognition is not installed. Run setup-stt.bat first."
             )
 
-    def transcribe(self, pcm: bytes) -> str:
+    def transcribe(self, pcm: bytes, *, prompt: str | None = None) -> str:
         self.validate()
         temporary_path: Path | None = None
         try:
@@ -45,21 +45,24 @@ class WhisperCpp:
                 temporary_path = Path(temporary.name)
 
             threads = min(8, os.cpu_count() or 4)
+            command = [
+                str(self.executable),
+                "--model",
+                str(self.model),
+                "--file",
+                str(temporary_path),
+                "--language",
+                "en",
+                "--threads",
+                str(threads),
+                "--no-gpu",
+                "--no-timestamps",
+                "--no-prints",
+            ]
+            if prompt and prompt.strip():
+                command.extend(("--prompt", prompt.strip()))
             result = self._runner(
-                [
-                    str(self.executable),
-                    "--model",
-                    str(self.model),
-                    "--file",
-                    str(temporary_path),
-                    "--language",
-                    "en",
-                    "--threads",
-                    str(threads),
-                    "--no-gpu",
-                    "--no-timestamps",
-                    "--no-prints",
-                ],
+                command,
                 cwd=self.directory,
                 capture_output=True,
                 text=True,

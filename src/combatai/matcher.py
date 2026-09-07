@@ -12,6 +12,7 @@ from .protocol import MenuItem
 
 MINIMUM_SCORE = 0.72
 AMBIGUITY_MARGIN = 0.02
+MAX_PROMPT_CHARACTERS = 1_500
 _SCOPES = ("second element", "wingman", "flight", "atc")
 _LEADING_POLITENESS = {"please"}
 _RECIPIENT_VERBS = {"ask", "order", "tell"}
@@ -44,13 +45,36 @@ def normalize_phrase(value: str) -> str:
         "startup": "start up",
         "airsea": "air sea",
         "r t b": "rtb",
-        "begin hill": "biggin hill",
-        "contact sc rescue": "contact air sea rescue",
     }
     for source, replacement in substitutions.items():
         normalized = re.sub(rf"\b{re.escape(source)}\b", replacement, normalized)
-    normalized = re.sub(r"\bwomen\b", "wingman", normalized)
     return normalized
+
+
+def build_vocabulary_prompt(
+    items: tuple[MenuItem, ...], *, maximum_characters: int = MAX_PROMPT_CHARACTERS
+) -> str:
+    prefix = "DCS radio command vocabulary: "
+    if maximum_characters <= len(prefix) + 1:
+        return ""
+
+    labels: list[str] = []
+    seen: set[str] = set()
+    maximum_depth = max((len(item.path) for item in items), default=0)
+    for depth in range(maximum_depth):
+        for item in items:
+            if depth >= len(item.path):
+                continue
+            label = " ".join(item.path[depth].split())
+            key = label.casefold()
+            if not label or key in seen:
+                continue
+            candidate = prefix + ", ".join((*labels, label)) + "."
+            if len(candidate) > maximum_characters:
+                return prefix + ", ".join(labels) + "." if labels else ""
+            labels.append(label)
+            seen.add(key)
+    return prefix + ", ".join(labels) + "." if labels else ""
 
 
 def match_catalogue(

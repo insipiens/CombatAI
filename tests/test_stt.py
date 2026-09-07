@@ -30,13 +30,20 @@ class SttTests(unittest.TestCase):
                 self.assertTrue(audio_path.is_file())
                 return subprocess.CompletedProcess(command, 0, " Contact air sea rescue.\n", "")
 
-            transcript = WhisperCpp(root, runner=runner).transcribe(b"\x00\x00" * 160)
+            transcript = WhisperCpp(root, runner=runner).transcribe(
+                b"\x00\x00" * 160,
+                prompt="DCS radio vocabulary: Wingman, Biggin Hill.",
+            )
 
         self.assertEqual(transcript, "Contact air sea rescue.")
         self.assertEqual(len(calls), 1)
         command, kwargs = calls[0]
         self.assertIn("--no-gpu", command)
         self.assertIn("--no-timestamps", command)
+        self.assertEqual(
+            command[command.index("--prompt") + 1],
+            "DCS radio vocabulary: Wingman, Biggin Hill.",
+        )
         self.assertEqual(kwargs["cwd"], stt)
         audio_path = Path(command[command.index("--file") + 1])
         self.assertFalse(audio_path.exists())
