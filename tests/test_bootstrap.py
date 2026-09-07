@@ -28,6 +28,11 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn("runtime\\python.exe", content, filename)
             self.assertNotIn("py -", content.lower(), filename)
 
+    def test_installer_elevates_only_mutating_commands(self) -> None:
+        installer = (ROOT / "tools" / "install.py").read_text(encoding="utf-8")
+        self.assertIn('info.lpVerb = "runas"', installer)
+        self.assertIn('args.command in ("install", "uninstall")', installer)
+
     def test_installer_starts_with_isolated_python_path(self) -> None:
         result = subprocess.run(
             [sys.executable, "-I", str(ROOT / "tools" / "install.py"), "--help"],

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a DCS Saved Games radio-panel override from the user's installed file."""
+"""Generate a radio-panel file containing the CombatAI hook."""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ def build_overlay(source: Path, hook: Path, destination: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, help="current DCS RadioCommandDialogsPanel.lua")
-    parser.add_argument("destination", type=Path, help="new Saved Games override path")
+    parser.add_argument("destination", type=Path, help="new generated panel path")
     parser.add_argument(
         "--hook",
         type=Path,

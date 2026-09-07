@@ -27,11 +27,13 @@ produced its intended effect.
 
 This is a developer proof of concept, not a packaged release. It has passed its automated
 protocol tests but has not yet passed the in-game acceptance test below. The procedure is
-reversible and does not modify the DCS installation under `Program Files`.
+reversible, but it necessarily modifies one Lua file in the DCS installation under
+`Program Files`.
 
-There is no existing "router" to edit. The setup tool takes the radio-panel file that DCS
-currently uses, appends the CombatAI hook to a generated copy, and places that copy at the
-equivalent path under Saved Games. DCS then loads the Saved Games version.
+There is no existing "router" to edit. Testing established that DCS does not load a
+`Saved Games\DCS\Scripts\UI` copy of the radio panel. The setup tool therefore appends the
+CombatAI hook to the active DCS installation file. Administrator permission is requested
+only while installing or removing that hook; running CombatAI does not require elevation.
 
 ### Requirements
 
@@ -68,17 +70,19 @@ With DCS and VAICOM closed, run:
 .\install.bat
 ```
 
-The installer searches the standard standalone and Steam DCS locations and the normal
-`Saved Games\DCS` or `Saved Games\DCS.openbeta` directories. It then chooses its base file:
+Windows displays a User Account Control prompt because the active file is normally beneath
+`Program Files`. The installer searches standard standalone and Steam locations and the
+normal `Saved Games\DCS` or `Saved Games\DCS.openbeta` directories. It appends CombatAI to
+the active radio-panel file exactly as found, so existing VAICOM additions are retained.
 
-1. if a Saved Games radio-panel file exists, append CombatAI to that exact file so additions
-   made by VAICOM or another mod are retained;
-2. otherwise, copy the current DCS installation version and append CombatAI to the copy;
-3. never alter the file under `Program Files`.
-
-Before replacing anything, it saves the selected base under
+Before replacing anything, it saves that exact active file under
 `Saved Games\DCS\Scripts\CombatAI\backups`. It writes the generated panel atomically and
 records the original and installed SHA-256 hashes in `Scripts\CombatAI\install.json`.
+
+Early CombatAI builds incorrectly generated an inactive Saved Games radio-panel override.
+When its intact version-1 manifest is present, the corrected installer restores that file
+from its recorded backup, archives the old manifest, and then performs the active
+installation. It refuses migration if either the old target or backup has changed.
 
 If automatic discovery finds no installation—or more than one—give the paths explicitly:
 
@@ -94,8 +98,9 @@ For Steam, `--dcs-install` normally points to:
 C:\Program Files (x86)\Steam\steamapps\common\DCSWorld
 ```
 
-CombatAI refuses a second installation, an unrecognised existing CombatAI modification, or
-an ambiguous DCS directory. It does not guess which installation the user intended.
+CombatAI refuses a second active installation, an unrecognised existing CombatAI
+modification, or an ambiguous DCS directory. It does not guess which installation the user
+intended.
 
 Check the installed state at any time:
 
@@ -103,10 +108,11 @@ Check the installed state at any time:
 .\runtime\python.exe tools\install.py status
 ```
 
-On a VAICOM system this is experimental coexistence. The two projects use different UDP
-ports, but their update callbacks have not yet been tested together in DCS. Do not run
-VAICOM's repair function during the test because it may regenerate the panel and remove the
-CombatAI addition.
+On a VAICOM system this is experimental coexistence. CombatAI backs up and extends the
+VAICOM-modified active panel rather than replacing it with a stock DCS copy. The projects use
+different UDP ports, but their update callbacks have not yet been tested together in DCS.
+Do not run VAICOM's reset or repair function while CombatAI is installed because it will
+regenerate the active panel and remove CombatAI's addition.
 
 ### Remove the DCS hook
 
@@ -116,13 +122,13 @@ With DCS and VAICOM closed, run:
 .\uninstall.bat
 ```
 
-If there was an earlier Saved Games override, the installer restores it byte-for-byte. If
-there was not, it removes the generated override so DCS returns to its Program Files version.
-The backup and an archived removal manifest are retained.
+The uninstaller requests administrator permission and restores the exact active panel that
+was backed up during installation. The backup and an archived removal manifest are retained.
 
 Removal is deliberately refused when the active file has changed since installation. That
-prevents CombatAI from overwriting a subsequent DCS, VAICOM, or third-party update. Inspect
-or repair the installation manually in that case.
+prevents CombatAI from overwriting a subsequent DCS, VAICOM, or third-party update. A DCS
+update or VAICOM reset may therefore require inspection or repair rather than automatic
+restoration.
 
 ### Run the proof of concept
 
@@ -140,13 +146,13 @@ If no menu arrives:
 
 1. confirm that a mission is running and the player is in an aircraft;
 2. run `.\runtime\python.exe tools\install.py status` and confirm that `healthy` is `true`;
-3. confirm that no other process is using UDP ports `34383` or `34384`;
+3. confirm that DCS owns UDP port `34383` and CombatAI owns `34384`;
 4. inspect `Saved Games\DCS\Logs\dcs.log` for Lua, socket, JSON, or port-binding errors;
 5. run the uninstall command if DCS radio operation behaves differently.
 
-The repository does not distribute Eagle Dynamics' Lua implementation. Every generated
-override is built from files already on the user's computer. It must be regenerated when DCS
-or VAICOM changes the underlying radio-panel file.
+The repository does not distribute Eagle Dynamics' Lua implementation. Every installed panel
+is generated from the file already on the user's computer. CombatAI must be reinstalled after
+DCS or VAICOM regenerates the underlying radio-panel file.
 
 ## Development check
 

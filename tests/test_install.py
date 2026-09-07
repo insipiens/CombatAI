@@ -5,7 +5,16 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from tools.install import InstallError, RELATIVE_PANEL, install_hook, installation_status, uninstall_hook
+from tools.build_radio_overlay import build_overlay
+from tools.install import (
+    InstallError,
+    RELATIVE_PANEL,
+    file_hash,
+    install_hook,
+    installation_status,
+    uninstall_hook,
+    _windows_command_line,
+)
 
 
 HOOK = b"-- COMBATAI RADIO HOOK BEGIN\nreturn true\n"
@@ -19,9 +28,10 @@ class InstallTests(unittest.TestCase):
         self.saved = self.root / "Saved Games" / "DCS"
         self.hook = self.root / "hook.lua"
         self.core = self.dcs / RELATIVE_PANEL
-        self.target = self.saved / RELATIVE_PANEL
+        self.saved_panel = self.saved / RELATIVE_PANEL
+        self.original_core = b"-- DCS core\n"
         self.core.parent.mkdir(parents=True)
-        self.core.write_bytes(b"-- DCS core\n")
+        self.core.write_bytes(self.original_core)
         self.hook.write_bytes(HOOK)
 
     def tearDown(self) -> None:
@@ -29,27 +39,26 @@ class InstallTests(unittest.TestCase):
 
     def test_clean_install_and_uninstall(self) -> None:
         manifest = install_hook(self.dcs, self.saved, self.hook)
-        self.assertEqual(manifest["base_kind"], "dcs_core")
-        self.assertIn(HOOK, self.target.read_bytes())
-        self.assertTrue(installation_status(self.saved)["healthy"])
+        self.assertEqual(manifest["schema"], 2)
+        self.assertEqual(manifest["base_kind"], "active_dcs_panel")
+        self.assertIn(HOOK, self.core.read_bytes())
+        self.assertFalse(self.saved_panel.exists())
+        self.assertTrue(installation_status(self.dcs, self.saved)["healthy"])
 
-        result = uninstall_hook(self.saved)
-        self.assertEqual(result["outcome"], "removed_generated_override")
-        self.assertFalse(self.target.exists())
+        result = uninstall_hook(self.dcs, self.saved)
+        self.assertEqual(result["outcome"], "restored_active_dcs_panel")
+        self.assertEqual(self.core.read_bytes(), self.original_core)
 
-    def test_preserves_and_restores_existing_override(self) -> None:
-        vaicom = b"-- VAICOM server-side script\n"
-        self.target.parent.mkdir(parents=True)
-        self.target.write_bytes(vaicom)
+    def test_preserves_and_restores_vaicom_in_active_panel(self) -> None:
+        vaicom_core = self.original_core + b"-- VAICOM server-side script\n"
+        self.core.write_bytes(vaicom_core)
 
-        manifest = install_hook(self.dcs, self.saved, self.hook)
-        self.assertEqual(manifest["base_kind"], "saved_games_override")
-        self.assertTrue(self.target.read_bytes().startswith(vaicom))
-        self.assertIn(HOOK, self.target.read_bytes())
+        install_hook(self.dcs, self.saved, self.hook)
+        self.assertTrue(self.core.read_bytes().startswith(vaicom_core.rstrip()))
+        self.assertIn(HOOK, self.core.read_bytes())
 
-        result = uninstall_hook(self.saved)
-        self.assertEqual(result["outcome"], "restored_saved_games_override")
-        self.assertEqual(self.target.read_bytes(), vaicom)
+        uninstall_hook(self.dcs, self.saved)
+        self.assertEqual(self.core.read_bytes(), vaicom_core)
 
     def test_second_install_is_rejected(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)
@@ -58,16 +67,16 @@ class InstallTests(unittest.TestCase):
 
     def test_changed_target_is_not_overwritten_on_uninstall(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)
-        self.target.write_bytes(self.target.read_bytes() + b"-- changed elsewhere\n")
+        self.core.write_bytes(self.core.read_bytes() + b"-- changed elsewhere\n")
         with self.assertRaisesRegex(InstallError, "has changed"):
-            uninstall_hook(self.saved)
-        self.assertIn(b"changed elsewhere", self.target.read_bytes())
+            uninstall_hook(self.dcs, self.saved)
+        self.assertIn(b"changed elsewhere", self.core.read_bytes())
 
     def test_manifest_contains_no_file_contents(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)
         manifest_path = self.saved / "Scripts" / "CombatAI" / "install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        self.assertEqual(manifest["schema"], 1)
+        self.assertEqual(manifest["schema"], 2)
         self.assertNotIn("content", manifest)
 
     def test_uninstall_rejects_redirected_backup(self) -> None:
@@ -79,7 +88,98 @@ class InstallTests(unittest.TestCase):
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
         with self.assertRaisesRegex(InstallError, "backup directory"):
-            uninstall_hook(self.saved)
+            uninstall_hook(self.dcs, self.saved)
+
+    def test_uninstall_rejects_different_dcs_install(self) -> None:
+        install_hook(self.dcs, self.saved, self.hook)
+        other_dcs = self.root / "Other DCS"
+        other_panel = other_dcs / RELATIVE_PANEL
+        other_panel.parent.mkdir(parents=True)
+        other_panel.write_bytes(self.original_core)
+
+        with self.assertRaisesRegex(InstallError, "selected DCS installation"):
+            uninstall_hook(other_dcs, self.saved)
+
+    def test_windows_elevation_preserves_paths_with_spaces(self) -> None:
+        command_line = _windows_command_line(
+            ["C:\\Combat AI\\tools\\install.py", "install", "--dcs-install", "C:\\DCS World"]
+        )
+        self.assertIn('"C:\\Combat AI\\tools\\install.py"', command_line)
+        self.assertIn('"C:\\DCS World"', command_line)
+
+    def test_legacy_saved_games_install_is_migrated(self) -> None:
+        vaicom_saved = b"-- VAICOM server-side script\n"
+        self._create_legacy_install(vaicom_saved)
+
+        manifest = install_hook(self.dcs, self.saved, self.hook)
+
+        self.assertEqual(manifest["schema"], 2)
+        self.assertEqual(self.saved_panel.read_bytes(), vaicom_saved)
+        self.assertIn(HOOK, self.core.read_bytes())
+        archives = list((self.saved / "Scripts" / "CombatAI").glob("install.migrated.*.json"))
+        self.assertEqual(len(archives), 1)
+
+    def test_legacy_status_is_not_reported_as_healthy(self) -> None:
+        self._create_legacy_install(b"-- VAICOM server-side script\n")
+
+        status = installation_status(self.dcs, self.saved)
+
+        self.assertTrue(status["legacy_install"])
+        self.assertTrue(status["recorded_file_intact"])
+        self.assertFalse(status["healthy"])
+        self.assertFalse(status["target_matches_selected_install"])
+
+    def test_legacy_uninstall_restores_saved_games_file(self) -> None:
+        vaicom_saved = b"-- VAICOM server-side script\n"
+        self._create_legacy_install(vaicom_saved)
+
+        result = uninstall_hook(self.dcs, self.saved)
+
+        self.assertEqual(result["outcome"], "restored_legacy_saved_games_override")
+        self.assertEqual(self.saved_panel.read_bytes(), vaicom_saved)
+        self.assertEqual(self.core.read_bytes(), self.original_core)
+
+    def test_legacy_generated_override_is_removed_during_migration(self) -> None:
+        self._create_legacy_install(self.original_core, base_kind="dcs_core")
+
+        install_hook(self.dcs, self.saved, self.hook)
+
+        self.assertFalse(self.saved_panel.exists())
+        self.assertIn(HOOK, self.core.read_bytes())
+
+    def test_changed_legacy_override_blocks_migration(self) -> None:
+        self._create_legacy_install(b"-- VAICOM server-side script\n")
+        self.saved_panel.write_bytes(self.saved_panel.read_bytes() + b"-- external change\n")
+
+        with self.assertRaisesRegex(InstallError, "changed"):
+            install_hook(self.dcs, self.saved, self.hook)
+
+        self.assertEqual(self.core.read_bytes(), self.original_core)
+
+    def _create_legacy_install(
+        self, base: bytes, base_kind: str = "saved_games_override"
+    ) -> None:
+        state = self.saved / "Scripts" / "CombatAI"
+        backups = state / "backups"
+        backups.mkdir(parents=True)
+        self.saved_panel.parent.mkdir(parents=True, exist_ok=True)
+        backup = backups / "RadioCommandDialogsPanel.legacy.lua"
+        backup.write_bytes(base)
+        source = self.root / "legacy-source.lua"
+        source.write_bytes(base)
+        build_overlay(source, self.hook, self.saved_panel)
+        manifest = {
+            "schema": 1,
+            "installed_at": "2026-09-07T00:00:00+00:00",
+            "dcs_install": str(self.dcs),
+            "saved_games": str(self.saved),
+            "target": str(self.saved_panel),
+            "base_kind": base_kind,
+            "base_sha256": file_hash(backup),
+            "installed_sha256": file_hash(self.saved_panel),
+            "backup": str(backup),
+        }
+        (state / "install.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
 if __name__ == "__main__":
