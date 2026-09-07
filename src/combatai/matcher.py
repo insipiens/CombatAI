@@ -44,9 +44,12 @@ def normalize_phrase(value: str) -> str:
         "startup": "start up",
         "airsea": "air sea",
         "r t b": "rtb",
+        "begin hill": "biggin hill",
+        "contact sc rescue": "contact air sea rescue",
     }
     for source, replacement in substitutions.items():
         normalized = re.sub(rf"\b{re.escape(source)}\b", replacement, normalized)
+    normalized = re.sub(r"\bwomen\b", "wingman", normalized)
     return normalized
 
 
@@ -67,7 +70,10 @@ def match_catalogue(
         item_scope = normalize_phrase(item.path[0])
         if scope is not None and item_scope != scope:
             continue
-        score = max(_similarity(spoken, form) for form in _spoken_forms(item))
+        score = max(
+            _similarity(spoken, form, contextual=contextual)
+            for form, contextual in _spoken_forms(item)
+        )
         if score >= minimum_score:
             ranked.append(RankedMatch(item, score))
 
@@ -84,25 +90,24 @@ def match_catalogue(
     return MatchResult("matched", (ranked[0],))
 
 
-def _spoken_forms(item: MenuItem) -> tuple[str, ...]:
+def _spoken_forms(item: MenuItem) -> tuple[tuple[str, bool], ...]:
     path = tuple(normalize_phrase(part) for part in item.path)
-    forms = {
-        " ".join(path),
-        path[-1],
-    }
+    forms = {" ".join(path): True, path[-1]: False}
     if len(path) > 1:
-        forms.add(" ".join(path[1:]))
-        forms.add(f"{path[0]} {path[-1]}")
-    return tuple(form for form in forms if form)
+        tail = " ".join(path[1:])
+        forms[tail] = forms.get(tail, False) or len(path) > 2 or path[0] == "other"
+        root_and_leaf = f"{path[0]} {path[-1]}"
+        forms[root_and_leaf] = True
+    return tuple((form, contextual) for form, contextual in forms.items() if form)
 
 
-def _similarity(spoken: str, candidate: str) -> float:
+def _similarity(spoken: str, candidate: str, *, contextual: bool) -> float:
     if spoken == candidate:
         return 1.0
     spoken_words = spoken.split()
     candidate_words = candidate.split()
     sequence_score = SequenceMatcher(None, spoken, candidate).ratio()
-    if _is_subsequence(candidate_words, spoken_words):
+    if contextual and _is_subsequence(candidate_words, spoken_words):
         coverage = len(candidate_words) / len(spoken_words)
         sequence_score = max(sequence_score, 0.92 + 0.08 * coverage)
     return sequence_score

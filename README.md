@@ -191,8 +191,9 @@ Execute one tightly gated voice command against the live catalogue:
 
 Only one unambiguous match scoring at least 90% is sent. DCS rebuilds and revalidates the
 catalogue revision immediately before dispatch; a changed menu, ambiguity, weaker match, or
-missing action is refused. This test executes the command immediately after recognition and
-does not ask for confirmation.
+missing action is refused. The process waits for a mission, then remains active for repeated
+commands until Escape or Ctrl+C. Each accepted command executes immediately after recognition
+without asking for confirmation.
 
 Start the Windows-side listener before entering a DCS mission:
 

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from contextlib import redirect_stdout
+import io
 from pathlib import Path
 import unittest
 
 from combatai.matcher import MatchResult, RankedMatch, match_catalogue, normalize_phrase
 from combatai.protocol import MenuItem
-from combatai.voice_command_test import MINIMUM_EXECUTION_SCORE, execution_candidate
+from combatai.voice_command_test import (
+    MINIMUM_EXECUTION_SCORE,
+    execution_candidate,
+    wait_for_catalogue,
+)
 
 
 ITEMS = (
@@ -62,6 +68,21 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "f10.10.1")  # type: ignore[union-attr]
 
+    def test_observed_whisper_biggin_hill_substitution_matches(self) -> None:
+        result = match_catalogue("Begin hill, request startup", ITEMS)
+        self.assertEqual(result.status, "matched")
+        self.assertEqual(result.best.item.action_id, "radio.5.1.1")  # type: ignore[union-attr]
+
+    def test_observed_whisper_wingman_substitution_matches(self) -> None:
+        result = match_catalogue("Women break left", ITEMS)
+        self.assertEqual(result.status, "matched")
+        self.assertEqual(result.best.item.action_id, "radio.1.4.2")  # type: ignore[union-attr]
+
+    def test_observed_whisper_air_sea_substitution_matches(self) -> None:
+        result = match_catalogue("Contact SC Rescue", ITEMS)
+        self.assertEqual(result.status, "matched")
+        self.assertEqual(result.best.item.action_id, "f10.10.1")  # type: ignore[union-attr]
+
     def test_unrelated_speech_does_not_match(self) -> None:
         result = match_catalogue("What is the weather tomorrow", ITEMS)
         self.assertEqual(result.status, "no_match")
@@ -94,6 +115,20 @@ class MatcherTests(unittest.TestCase):
         item = MenuItem("legacy.1", "Test", ("Test",), executable=False)
         result = MatchResult("matched", (RankedMatch(item, 1.0),))
         self.assertIsNone(execution_candidate(result))
+
+    def test_startup_wait_retries_until_catalogue_arrives(self) -> None:
+        class WaitingClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def request_menu_and_wait(self, timeout: float) -> object | None:
+                self.calls += 1
+                return object() if self.calls == 3 else None
+
+        client = WaitingClient()
+        with redirect_stdout(io.StringIO()):
+            wait_for_catalogue(client)  # type: ignore[arg-type]
+        self.assertEqual(client.calls, 3)
 
 
 if __name__ == "__main__":
