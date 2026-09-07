@@ -25,21 +25,32 @@ class RadioHookTests(unittest.TestCase):
         self.assertIn("cai_base.table.sort(keys)", self.source)
         self.assertNotIn("for index = 1, #menu.items do", self.source)
 
-    def test_only_f10_action_indexes_enter_execution_map(self) -> None:
-        executable_block = re.search(
-            r'local executable = scope == "f10".*?items\[#items \+ 1\]',
+    def test_only_f10_action_indexes_use_mission_action_execution(self) -> None:
+        f10_block = re.search(
+            r'if scope == "f10" and item\.command\.actionIndex ~= nil then.*?else',
             self.source,
             re.DOTALL,
         )
-        self.assertIsNotNone(executable_block)
-        assert executable_block is not None
-        self.assertIn("if executable then", executable_block.group())
-        self.assertIn("actions[action_id] = item.command.actionIndex", executable_block.group())
+        self.assertIsNotNone(f10_block)
+        assert f10_block is not None
+        self.assertIn("action_index = item.command.actionIndex", f10_block.group())
         self.assertNotRegex(self.source, r"item\.command\s*:\s*perform")
         self.assertNotRegex(self.source, r"item\.command\.perform\s*\(")
 
-    def test_execution_remains_mission_action_only(self) -> None:
-        self.assertEqual(self.source.count("missionCommands.doAction(action)"), 1)
+    def test_f10_execution_remains_mission_action_only(self) -> None:
+        self.assertEqual(
+            self.source.count("missionCommands.doAction(action.action_index)"),
+            1,
+        )
+
+    def test_standard_execution_uses_dcs_menu_selection(self) -> None:
+        self.assertIn("commandDialogsPanel.switchToMainMenu(self)", self.source)
+        self.assertIn("commandDialogsPanel.selectMenuItem(self, index)", self.source)
+
+    def test_catalogue_is_recaptured_before_revision_validation(self) -> None:
+        capture = self.source.index("cai_capture_menu(false)", self.source.index('message.type ~= "execute"'))
+        validation = self.source.index("message.revision ~= cai_state.revision")
+        self.assertLess(capture, validation)
 
 
 if __name__ == "__main__":

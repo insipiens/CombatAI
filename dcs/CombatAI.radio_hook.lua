@@ -1,7 +1,7 @@
 -- COMBATAI RADIO HOOK BEGIN
 -- Appended to the user's own DCS RadioCommandDialogsPanel.lua at installation time.
--- It exports the initial WWII command scope: Wingman, Flight, Second Element,
--- ATC, and mission-generated F10 entries. Only F10 execution is enabled yet.
+-- It exports and executes the initial WWII command scope: Wingman, Flight,
+-- Second Element, ATC, and mission-generated F10 entries.
 
 do
     -- RadioCommandDialogsPanel switches into a Lua module environment where _G
@@ -134,13 +134,20 @@ do
                         signature_parts
                     )
                 elseif cai_base.type(item.command) == "table" then
-                    local executable = scope == "f10" and item.command.actionIndex ~= nil
+                    local executable = true
                     local action_id
-                    if executable then
+                    if scope == "f10" and item.command.actionIndex ~= nil then
                         action_id = "f10." .. cai_base.table.concat(item_indexes, ".")
-                        actions[action_id] = item.command.actionIndex
+                        actions[action_id] = {
+                            kind = "f10",
+                            action_index = item.command.actionIndex,
+                        }
                     else
                         action_id = "radio." .. cai_base.table.concat(item_indexes, ".")
+                        actions[action_id] = {
+                            kind = "radio",
+                            indexes = item_indexes,
+                        }
                     end
                     items[#items + 1] = {
                         action_id = action_id,
@@ -224,6 +231,23 @@ do
         cai_send(result)
     end
 
+    local function cai_execute_action(action)
+        if action.kind == "f10" then
+            cai_base.missionCommands.doAction(action.action_index)
+            return
+        end
+        if action.kind ~= "radio" or cai_base.type(action.indexes) ~= "table" then
+            cai_base.error("invalid CombatAI action")
+        end
+
+        -- Drive DCS's own menu implementation so recipient selection, radio
+        -- tuning, and inherited submenu parameters follow the normal path.
+        commandDialogsPanel.switchToMainMenu(self)
+        for _, index in cai_base.ipairs(action.indexes) do
+            commandDialogsPanel.selectMenuItem(self, index)
+        end
+    end
+
     local function cai_process(raw)
         if not raw or #raw > cai_max_datagram then
             return
@@ -256,6 +280,9 @@ do
             cai_result(request_id, false, "unknown_message", "Unsupported request type")
             return
         end
+        -- Close the polling race: rebuild the catalogue immediately before
+        -- validating the revision and action identifier.
+        cai_capture_menu(false)
         if message.revision ~= cai_state.revision then
             cai_result(request_id, false, "stale_revision", "The live radio menu has changed")
             cai_capture_menu(true)
@@ -263,12 +290,12 @@ do
         end
         local action = cai_state.actions[message.action_id]
         if action == nil then
-            cai_result(request_id, false, "unknown_action", "Action is not executable in the current menu")
+            cai_result(request_id, false, "unknown_action", "Action is not in the current menu")
             return
         end
 
         local executed, error_message = cai_base.pcall(function()
-            cai_base.missionCommands.doAction(action)
+            cai_execute_action(action)
         end)
         if executed then
             cai_result(

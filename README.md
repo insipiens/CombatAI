@@ -6,7 +6,7 @@ routing, optional Gemini interpretation, DCS execution, and short local speech o
 
 This repository contains the first technical proof—access to selected live DCS radio-menu
 branches over localhost UDP—plus Windows microphone capture and local speech recognition.
-It does not yet contain transcript matching, standard radio-command execution, Gemini, or TTS.
+It does not yet contain HOTAS PTT, continuous operation, Gemini, or TTS.
 
 ## Current proof of concept
 
@@ -16,16 +16,15 @@ mission-generated F10 branches. It:
 - reads the already-instantiated `data.rootItem` inside the radio-dialogue environment;
 - flattens selectable entries into paths without exporting functions or arbitrary DCS state;
 - emits a new snapshot only when the menu changes;
-- marks standard radio commands as display-only;
-- accepts only a validated F10 action from the same live menu revision;
-- calls `missionCommands.doAction` only for that validated F10 action;
+- accepts only a validated action from the same live menu revision;
+- drives standard commands through DCS's own menu-selection implementation;
+- calls `missionCommands.doAction` for validated F10 actions;
 - returns an explicit acceptance or rejection;
 - binds its receiver to `127.0.0.1` only.
 
-The Python console prints all in-scope branches. It permits numbered selection only for F10
-entries and explicitly refuses display-only standard commands. An `accepted` result means that
-the Lua call completed; DCS does not expose whether the campaign script subsequently produced
-its intended effect.
+The Python console prints all in-scope branches and permits numbered selection. An `accepted`
+result means that the Lua call completed; DCS does not expose whether the campaign script
+subsequently produced its intended effect.
 
 ## Experimental Windows setup
 
@@ -169,8 +168,8 @@ The first run downloads and verifies the official whisper.cpp Windows x64 build 
 release it to print the locally recognised text and elapsed transcription time. The temporary
 WAV passed to the separate whisper.cpp process is deleted immediately afterward.
 
-Speech recognition and the numbered radio console remain separate tests. Voice-triggered
-execution has deliberately not been added yet.
+Speech recognition and the numbered radio console remain available as separate diagnostic
+tests.
 
 Test one spoken phrase against the current live catalogue:
 
@@ -184,6 +183,17 @@ prints either one proposed path, an ambiguity, or no match. It never sends an ex
 request to DCS. Recipient names are significant: `break left` is ambiguous when the same
 command exists under Wingman, Flight, and Second Element, while `wingman break left` is not.
 
+Execute one tightly gated voice command against the live catalogue:
+
+```powershell
+.\voice-command-test.bat
+```
+
+Only one unambiguous match scoring at least 90% is sent. DCS rebuilds and revalidates the
+catalogue revision immediately before dispatch; a changed menu, ambiguity, weaker match, or
+missing action is refused. This test executes the command immediately after recognition and
+does not ask for confirmation.
+
 Start the Windows-side listener before entering a DCS mission:
 
 ```powershell
@@ -191,9 +201,8 @@ Start the Windows-side listener before entering a DCS mission:
 ```
 
 Then start DCS and load a mission. The console should print the current Wingman, Flight,
-Second Element, ATC, and F10 hierarchy. Standard entries are labelled `[display only]` and
-cannot yet be invoked. Enter the number of an F10 entry to invoke it, `R` to request a new
-snapshot, or `Q` to stop the console.
+Second Element, ATC, and F10 hierarchy. Enter an entry's number to invoke it, `R` to request
+a new snapshot, or `Q` to stop the console.
 
 If no menu arrives:
 
