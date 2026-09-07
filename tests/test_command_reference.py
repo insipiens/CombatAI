@@ -11,7 +11,7 @@ ITEMS = (
     MenuItem("2", "Taxi", ("ATC", "Ford", "Taxi")),
     MenuItem("3", "Inbound", ("ATC", "Tangmere", "Inbound")),
     MenuItem("4", "Engage", ("Wingman", "Engage", "Bandits")),
-    MenuItem("5", "Rescue", ("F10", "Contact Air Sea Rescue")),
+    MenuItem("5", "Rescue", ("Other", "Contact Air Sea Rescue")),
 )
 
 
@@ -41,6 +41,17 @@ class CommandReferenceTests(unittest.TestCase):
     def test_lists_nested_node(self) -> None:
         listing = list_node_children(ITEMS, "Ford")
         self.assertEqual(listing.children, ("Startup", "Taxi"))
+
+    def test_f10_alias_resolves_dcs_other_root(self) -> None:
+        listing = list_node_children(ITEMS, "F10")
+        self.assertEqual(listing.status, "found")
+        self.assertEqual(listing.node, "Other")
+        self.assertEqual(listing.children, ("Contact Air Sea Rescue",))
+
+    def test_f10_alias_does_not_match_nested_other(self) -> None:
+        nested = ITEMS + (MenuItem("6", "Nested", ("ATC", "Other", "Nested")),)
+        listing = list_node_children(nested, "F10")
+        self.assertEqual(listing.children, ("Contact Air Sea Rescue",))
 
     def test_unknown_node_is_terse(self) -> None:
         listing = list_node_children(ITEMS, "carrier")
