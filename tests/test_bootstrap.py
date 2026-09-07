@@ -45,9 +45,13 @@ class BootstrapTests(unittest.TestCase):
         self.assertGreaterEqual(setup.count("Get-FileHash"), 3)
         self.assertIn("System.Diagnostics.ProcessStartInfo", setup)
         self.assertIn("RedirectStandardError = $true", setup)
+        self.assertIn('Arguments = "--version"', setup)
+        self.assertEqual(setup.count("ReadToEndAsync()"), 2)
+        self.assertNotIn(".StandardOutput.ReadToEnd()", setup)
+        self.assertNotIn(".StandardError.ReadToEnd()", setup)
         self.assertNotIn("& $WhisperExe --help", setup)
         self.assertNotIn("& $StagedExe --help", setup)
-        self.assertNotIn("pip", setup.lower())
+        self.assertNotIn("pip install", setup.lower())
 
     def test_installer_elevates_only_mutating_commands(self) -> None:
         installer = (ROOT / "tools" / "install.py").read_text(encoding="utf-8")

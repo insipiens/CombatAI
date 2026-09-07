@@ -18,7 +18,7 @@ $ModelPath = Join-Path $SttDirectory $ModelName
 function Test-WhisperExecutable([string]$Path) {
     $StartInfo = New-Object System.Diagnostics.ProcessStartInfo
     $StartInfo.FileName = $Path
-    $StartInfo.Arguments = "--help"
+    $StartInfo.Arguments = "--version"
     $StartInfo.UseShellExecute = $false
     $StartInfo.RedirectStandardOutput = $true
     $StartInfo.RedirectStandardError = $true
@@ -29,9 +29,13 @@ function Test-WhisperExecutable([string]$Path) {
         if (-not $Process.Start()) {
             return $false
         }
-        $null = $Process.StandardOutput.ReadToEnd()
-        $null = $Process.StandardError.ReadToEnd()
+        # Drain both redirected pipes concurrently. Reading them sequentially can
+        # deadlock when a native process fills the pipe that is not being read.
+        $StandardOutput = $Process.StandardOutput.ReadToEndAsync()
+        $StandardError = $Process.StandardError.ReadToEndAsync()
         $Process.WaitForExit()
+        $null = $StandardOutput.Result
+        $null = $StandardError.Result
         return $Process.ExitCode -eq 0
     }
     catch {
