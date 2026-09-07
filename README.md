@@ -28,7 +28,7 @@ CombatAI currently provides:
 - catalogue-derived Whisper vocabulary prompting;
 - deterministic scoring with a configurable floor and runner-up lead;
 - Piper's Alan voice as raw PCM, played from memory through SDL;
-- selectable audio output, interruptible speech, and a restrained configurable speech pace;
+- selectable audio output, interruptible speech, and configurable speech pace;
 - concise accepted/rejected cues through the same output device;
 - rotating text and JSONL development logs.
 
@@ -129,7 +129,7 @@ Start CombatAI before entering a DCS mission:
 Hold Space or the configured HOTAS button, speak, and release. A command is sent immediately
 only when it clears both configured matching gates. PTT stops active SDL playback, terminates
 Piper if synthesis is still running, discards that response, and starts microphone capture.
-Alan defaults to a restrained `0.95` length scale; the earlier `0.80` setting is migrated once.
+Alan defaults to Piper's standard `1.00` length scale. Configuration schema 5 returns the earlier `0.80` and `0.95` accelerated defaults to standard timing.
 
 Useful local spoken commands include:
 

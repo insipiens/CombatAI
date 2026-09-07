@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-SCHEMA = 4
+SCHEMA = 5
 DEFAULT_MINIMUM_SCORE = 0.70
 DEFAULT_MINIMUM_LEAD = 0.10
 MINIMUM_SCORE_RANGE = (0.60, 0.95)
 MINIMUM_LEAD_RANGE = (0.02, 0.30)
 CUE_VOLUME_RANGE = (0.05, 1.00)
-DEFAULT_SPEECH_LENGTH_SCALE = 0.95
+DEFAULT_SPEECH_LENGTH_SCALE = 1.00
 
 
 def config_path() -> Path:
@@ -59,7 +59,7 @@ def load_document(path: Path | None = None) -> dict[str, Any]:
     document["ptt"] = _validated_ptt(raw.get("ptt"))
     document["feedback"] = _validated_feedback(raw.get("feedback"))
     document["audio"] = _validated_audio(raw.get("audio"))
-    if raw.get("schema") == 3 and document["audio"]["speech_length_scale"] == 0.80:
+    if raw.get("schema") in {3, 4} and document["audio"]["speech_length_scale"] in {0.80, 0.95}:
         document["audio"]["speech_length_scale"] = DEFAULT_SPEECH_LENGTH_SCALE
     return document
 
