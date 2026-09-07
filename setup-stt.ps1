@@ -1,8 +1,8 @@
 param(
     [ValidateSet("base.en", "small.en", "medium.en")]
     [string]$Model = "base.en",
-    [ValidateSet("cpu", "cuda12")]
-    [string]$Compute = "cpu"
+    [ValidateSet("auto", "cpu", "cuda12")]
+    [string]$Compute = "auto"
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,10 +19,6 @@ $Archives = @{
         Sha256 = "c1b17166e1e31a91cc8e9c1f910d3785e3ce757bb2958bf9dce13fdb4880005f"
     }
 }
-$SelectedArchive = $Archives[$Compute]
-$WhisperArchive = $SelectedArchive.Name
-$WhisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/download/$WhisperVersion/$WhisperArchive"
-$WhisperSha256 = $SelectedArchive.Sha256
 $Models = @{
     "base.en" = @{
         Name = "ggml-base.en.bin"
@@ -47,6 +43,21 @@ $ManifestPath = Join-Path $SttDirectory "combatai-stt.json"
 $WorkerExe = Join-Path $SttDirectory "combatai-whisper.exe"
 $ModelPath = Join-Path $SttDirectory $Selected.Name
 $ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$($Selected.Name)?download=true"
+
+if ($Compute -eq "auto") {
+    $Compute = "cpu"
+    if (Test-Path -LiteralPath $ManifestPath -PathType Leaf) {
+        try {
+            $ExistingManifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+            if ($ExistingManifest.compute -eq "cuda12") { $Compute = "cuda12" }
+        }
+        catch { $Compute = "cpu" }
+    }
+}
+$SelectedArchive = $Archives[$Compute]
+$WhisperArchive = $SelectedArchive.Name
+$WhisperUrl = "https://github.com/ggml-org/whisper.cpp/releases/download/$WhisperVersion/$WhisperArchive"
+$WhisperSha256 = $SelectedArchive.Sha256
 
 function Test-Worker([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
