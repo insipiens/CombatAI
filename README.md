@@ -169,8 +169,20 @@ The first run downloads and verifies the official whisper.cpp Windows x64 build 
 release it to print the locally recognised text and elapsed transcription time. The temporary
 WAV passed to the separate whisper.cpp process is deleted immediately afterward.
 
-Speech recognition is currently independent of the radio console. Transcript matching and
-voice-triggered execution have deliberately not been added yet.
+Speech recognition and the numbered radio console remain separate tests. Voice-triggered
+execution has deliberately not been added yet.
+
+Test one spoken phrase against the current live catalogue:
+
+```powershell
+.\matching-test.bat
+```
+
+Close `run.bat` first because only one process can own CombatAI's UDP listener. The test
+retrieves the current catalogue, records while Space is held, transcribes after release, and
+prints either one proposed path, an ambiguity, or no match. It never sends an execution
+request to DCS. Recipient names are significant: `break left` is ambiguous when the same
+command exists under Wingman, Flight, and Second Element, while `wingman break left` is not.
 
 Start the Windows-side listener before entering a DCS mission:
 

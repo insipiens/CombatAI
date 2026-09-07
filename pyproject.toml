@@ -17,6 +17,7 @@ combatai-menu = "combatai.console:main"
 combatai-microphone = "combatai.microphone:main"
 combatai-recording-test = "combatai.recording_test:main"
 combatai-transcription-test = "combatai.transcription_test:main"
+combatai-matching-test = "combatai.matching_test:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
