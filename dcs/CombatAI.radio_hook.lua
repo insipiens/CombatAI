@@ -29,6 +29,10 @@ do
         recent_results = {},
     }
 
+    local function cai_log(message)
+        cai_base.print("CombatAI: " .. cai_base.tostring(message))
+    end
+
     local function cai_now()
         return cai_socket.gettime()
     end
@@ -226,6 +230,18 @@ do
         end
     end
 
+    -- VAICOM replaces initialize() and calls SetupApplicationUpdateCallback() from
+    -- inside it. That reset removes callbacks registered while this file is first
+    -- loaded. Wrap the final implementation and add CombatAI only after VAICOM (or
+    -- the stock DCS implementation) has completed radio initialization.
+    local cai_previous_initialize = initialize
+    function initialize(...)
+        cai_previous_initialize(...)
+        cai_gui.AddUpdateCallback(cai_update)
+        cai_log("radio callback registered after mission initialization")
+        cai_capture_menu(true)
+    end
+
     cai_state.sender = cai_socket.udp()
     cai_state.sender:setpeername("127.0.0.1", cai_send_port)
     cai_state.sender:settimeout(0)
@@ -234,6 +250,6 @@ do
     cai_state.receiver:settimeout(0)
 
     cai_gui.SetupApplicationUpdateCallback()
-    cai_gui.AddUpdateCallback(cai_update)
+    cai_log("radio hook loaded; waiting for mission initialization")
 end
 -- COMBATAI RADIO HOOK END
