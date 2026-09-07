@@ -155,7 +155,18 @@ Hold the space bar while speaking and release it to hear the captured audio once
 current Windows default output. The test keeps the recording only in memory and imposes a
 30-second maximum. It does not yet recognise speech or invoke DCS actions.
 
-Microphone capture is currently independent of the F10 console. Speech recognition and
+Install the pinned local speech-recognition engine and English model, then test one utterance:
+
+```powershell
+.\transcription-test.bat
+```
+
+The first run downloads and verifies the official whisper.cpp Windows x64 build and the
+`base.en` model (approximately 150 MiB combined). Hold the space bar while speaking and
+release it to print the locally recognised text and elapsed transcription time. The temporary
+WAV passed to the separate whisper.cpp process is deleted immediately afterward.
+
+Speech recognition is currently independent of the F10 console. Transcript matching and
 voice-triggered execution have deliberately not been added yet.
 
 Start the Windows-side listener before entering a DCS mission:

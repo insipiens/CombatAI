@@ -28,11 +28,20 @@ class BootstrapTests(unittest.TestCase):
             "microphone.bat",
             "recording-test.bat",
             "run.bat",
+            "transcription-test.bat",
             "uninstall.bat",
         ):
             content = (ROOT / filename).read_text(encoding="utf-8")
             self.assertIn("runtime\\python.exe", content, filename)
             self.assertNotIn("py -", content.lower(), filename)
+
+    def test_stt_setup_pins_and_verifies_binary_and_model(self) -> None:
+        setup = (ROOT / "setup-stt.ps1").read_text(encoding="utf-8")
+        self.assertIn('$WhisperVersion = "b4938"', setup)
+        self.assertIn("whisper-bin-x64.zip", setup)
+        self.assertIn("ggml-base.en.bin", setup)
+        self.assertGreaterEqual(setup.count("Get-FileHash"), 3)
+        self.assertNotIn("pip", setup.lower())
 
     def test_installer_elevates_only_mutating_commands(self) -> None:
         installer = (ROOT / "tools" / "install.py").read_text(encoding="utf-8")

@@ -12,7 +12,13 @@ import time
 from typing import Sequence
 import wave
 
-from .microphone import WinMmAudioInput, _pcm16_level, load_selection, resolve_selection
+from .microphone import (
+    Microphone,
+    WinMmAudioInput,
+    _pcm16_level,
+    load_selection,
+    resolve_selection,
+)
 
 
 VK_ESCAPE = 0x1B
@@ -66,6 +72,38 @@ def _play(pcm: bytes) -> None:
     winsound.PlaySound(_wav_bytes(pcm), winsound.SND_MEMORY)
 
 
+def capture_while_space(
+    audio: WinMmAudioInput,
+    microphone: Microphone,
+    keys: WindowsKeys,
+    *,
+    maximum_seconds: float,
+) -> bytes:
+    keys.wait_for_space()
+    deadline = time.monotonic() + maximum_seconds
+    chunks: list[bytes] = []
+    captured_bytes = 0
+
+    def keep_recording() -> bool:
+        return keys.is_down(VK_SPACE) and time.monotonic() < deadline
+
+    for payload in audio.pcm_chunks(microphone.device_id, keep_recording):
+        chunks.append(payload)
+        captured_bytes += len(payload)
+        duration = captured_bytes / (SAMPLE_RATE * 2)
+        print(f"\rRecording... {duration:4.1f} seconds", end="", flush=True)
+
+    keys.flush_console_input()
+    pcm = b"".join(chunks)
+    duration = len(pcm) / (SAMPLE_RATE * 2)
+    if duration < 0.1:
+        raise OSError("No usable audio was captured; hold SPACE for longer and try again.")
+    level = _pcm16_level(pcm)
+    dbfs = 20 * math.log10(level) if level > 0 else -math.inf
+    print(f"\rCaptured {duration:.1f} seconds; average {dbfs:.1f} dBFS.          ")
+    return pcm
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Record from the selected CombatAI microphone and play it back"
@@ -83,30 +121,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Microphone: {microphone.name}")
         print("\nHold SPACE and speak. Release SPACE to hear the recording.")
         print("Press ESC before recording to cancel.\n")
-        keys.wait_for_space()
-
-        started = time.monotonic()
-        deadline = started + args.maximum_seconds
-        chunks: list[bytes] = []
-        captured_bytes = 0
-
-        def keep_recording() -> bool:
-            return keys.is_down(VK_SPACE) and time.monotonic() < deadline
-
-        for payload in audio.pcm_chunks(microphone.device_id, keep_recording):
-            chunks.append(payload)
-            captured_bytes += len(payload)
-            duration = captured_bytes / (SAMPLE_RATE * 2)
-            print(f"\rRecording... {duration:4.1f} seconds", end="", flush=True)
-
-        keys.flush_console_input()
-        pcm = b"".join(chunks)
-        duration = len(pcm) / (SAMPLE_RATE * 2)
-        if duration < 0.1:
-            raise OSError("No usable audio was captured; hold SPACE for longer and try again.")
-        level = _pcm16_level(pcm)
-        dbfs = 20 * math.log10(level) if level > 0 else -math.inf
-        print(f"\rCaptured {duration:.1f} seconds; average {dbfs:.1f} dBFS.          ")
+        pcm = capture_while_space(
+            audio, microphone, keys, maximum_seconds=args.maximum_seconds
+        )
         print("Playing through the current Windows default output...\n")
         _play(pcm)
         print("Playback complete.")
