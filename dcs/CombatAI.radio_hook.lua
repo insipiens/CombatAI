@@ -1,6 +1,7 @@
 -- COMBATAI RADIO HOOK BEGIN
 -- Appended to the user's own DCS RadioCommandDialogsPanel.lua at installation time.
--- It deliberately exports only the live F10 menu and accepts only validated menu actions.
+-- It exports the initial WWII command scope: Wingman, Flight, Second Element,
+-- ATC, and mission-generated F10 entries. Only F10 execution is enabled yet.
 
 do
     -- RadioCommandDialogsPanel switches into a Lua module environment where _G
@@ -69,27 +70,88 @@ do
         return result
     end
 
-    local function cai_walk_menu(menu, path, items, actions, signature_parts)
+    local function cai_condition_allows(item)
+        if cai_base.type(item.condition) ~= "table" or
+           cai_base.type(item.condition.check) ~= "function" then
+            return true
+        end
+        local ok, allowed = cai_base.pcall(item.condition.check, item.condition)
+        return ok and allowed ~= false
+    end
+
+    local function cai_submenu(item)
+        if cai_base.type(item.submenu) == "table" then
+            return item.submenu
+        end
+        if cai_base.type(item.getSubmenu) == "function" then
+            local ok, submenu = cai_base.pcall(item.getSubmenu, item)
+            if ok and cai_base.type(submenu) == "table" then
+                return submenu
+            end
+        end
+        return nil
+    end
+
+    local function cai_numeric_keys(items)
+        local keys = {}
+        for key, _ in cai_base.pairs(items) do
+            if cai_base.type(key) == "number" then
+                keys[#keys + 1] = key
+            end
+        end
+        cai_base.table.sort(keys)
+        return keys
+    end
+
+    local function cai_copy_indexes(indexes, index)
+        local result = {}
+        for position = 1, #indexes do
+            result[position] = indexes[position]
+        end
+        result[#result + 1] = index
+        return result
+    end
+
+    local function cai_walk_menu(menu, path, indexes, scope, items, actions, signature_parts)
         if not menu or cai_base.type(menu.items) ~= "table" then
             return
         end
-        for index = 1, #menu.items do
+        for _, index in cai_base.ipairs(cai_numeric_keys(menu.items)) do
             local item = menu.items[index]
-            if cai_base.type(item) == "table" then
+            if cai_base.type(item) == "table" and cai_condition_allows(item) then
                 local label = cai_label(item.name)
                 local item_path = cai_copy_path(path, label)
-                if cai_base.type(item.submenu) == "table" then
-                    cai_walk_menu(item.submenu, item_path, items, actions, signature_parts)
-                elseif cai_base.type(item.command) == "table" and item.command.actionIndex ~= nil then
-                    local action_id = "f10." .. cai_base.tostring(#items + 1)
+                local item_indexes = cai_copy_indexes(indexes, index)
+                local submenu = cai_submenu(item)
+                if submenu then
+                    cai_walk_menu(
+                        submenu,
+                        item_path,
+                        item_indexes,
+                        scope,
+                        items,
+                        actions,
+                        signature_parts
+                    )
+                elseif cai_base.type(item.command) == "table" then
+                    local executable = scope == "f10" and item.command.actionIndex ~= nil
+                    local action_id
+                    if executable then
+                        action_id = "f10." .. cai_base.table.concat(item_indexes, ".")
+                        actions[action_id] = item.command.actionIndex
+                    else
+                        action_id = "radio." .. cai_base.table.concat(item_indexes, ".")
+                    end
                     items[#items + 1] = {
                         action_id = action_id,
                         label = label,
                         path = item_path,
+                        executable = executable,
                     }
-                    actions[action_id] = item.command.actionIndex
                     signature_parts[#signature_parts + 1] =
-                        cai_base.table.concat(item_path, "\31") .. "\30" .. cai_base.tostring(item.command.actionIndex)
+                        action_id .. "\30" ..
+                        cai_base.table.concat(item_path, "\31") .. "\30" ..
+                        cai_base.tostring(executable)
                 end
             end
         end
@@ -99,9 +161,29 @@ do
         local items = {}
         local actions = {}
         local signature_parts = {}
-        if data and data.initialized and data.menuOther then
-            local root = data.menuOther.submenu or data.menuOther
-            cai_walk_menu(root, {}, items, actions, signature_parts)
+        if data and data.initialized and data.rootItem then
+            local root = cai_submenu(data.rootItem)
+            if root and cai_base.type(root.items) == "table" then
+                local included_slots = {1, 2, 3, 5, 10}
+                for _, slot in cai_base.ipairs(included_slots) do
+                    local item = root.items[slot]
+                    if cai_base.type(item) == "table" and cai_condition_allows(item) then
+                        local label = cai_label(item.name)
+                        local submenu = cai_submenu(item)
+                        if submenu then
+                            cai_walk_menu(
+                                submenu,
+                                {label},
+                                {slot},
+                                slot == 10 and "f10" or "radio",
+                                items,
+                                actions,
+                                signature_parts
+                            )
+                        end
+                    end
+                end
+            end
         end
 
         local signature = cai_base.table.concat(signature_parts, "\29")
@@ -175,13 +257,13 @@ do
             return
         end
         if message.revision ~= cai_state.revision then
-            cai_result(request_id, false, "stale_revision", "The live F10 menu has changed")
+            cai_result(request_id, false, "stale_revision", "The live radio menu has changed")
             cai_capture_menu(true)
             return
         end
         local action = cai_state.actions[message.action_id]
         if action == nil then
-            cai_result(request_id, false, "unknown_action", "Action is not in the current F10 menu")
+            cai_result(request_id, false, "unknown_action", "Action is not executable in the current menu")
             return
         end
 

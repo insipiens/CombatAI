@@ -13,7 +13,7 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    print("CombatAI F10 proof of concept")
+    print("CombatAI radio-menu proof of concept")
     print("Waiting for DCS on 127.0.0.1:34383 …")
 
     try:
@@ -39,11 +39,12 @@ def _run(client: DcsMenuClient) -> int:
     while True:
         snapshot = client.snapshot
         assert snapshot is not None
-        print(f"\nF10 menu revision {snapshot.revision}")
+        print(f"\nRadio menu revision {snapshot.revision}")
         if not snapshot.items:
-            print("  (No selectable F10 actions are currently available.)")
+            print("  (No in-scope radio actions are currently available.)")
         for number, item in enumerate(snapshot.items, 1):
-            print(f"  {number:>2}. {' > '.join(item.path)}")
+            suffix = " [display only]" if not item.executable else ""
+            print(f"  {number:>2}. {' > '.join(item.path)}{suffix}")
         print("\nEnter a number, R to refresh, or Q to quit.")
         choice = input("> ").strip().lower()
         if choice == "q":
@@ -57,6 +58,10 @@ def _run(client: DcsMenuClient) -> int:
             item = snapshot.items[index]
         except (ValueError, IndexError):
             print("Invalid selection.")
+            continue
+
+        if not item.executable:
+            print("Standard radio-command execution is not enabled in this test.")
             continue
 
         request_id = client.execute(item.action_id, snapshot.revision)

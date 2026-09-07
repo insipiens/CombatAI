@@ -20,6 +20,7 @@ class MenuItem:
     action_id: str
     label: str
     path: tuple[str, ...]
+    executable: bool = True
 
     @classmethod
     def from_mapping(cls, value: Any) -> "MenuItem":
@@ -32,7 +33,15 @@ class MenuItem:
         if not isinstance(raw_path, list) or not raw_path or len(raw_path) > 16:
             raise ProtocolError("path must contain between 1 and 16 labels")
         path = tuple(_short_string(part, "path label", MAX_TEXT_LENGTH) for part in raw_path)
-        return cls(action_id=action_id, label=label, path=path)
+        executable = value.get("executable", True)
+        if not isinstance(executable, bool):
+            raise ProtocolError("executable must be boolean")
+        return cls(
+            action_id=action_id,
+            label=label,
+            path=path,
+            executable=executable,
+        )
 
 
 @dataclass(frozen=True, slots=True)

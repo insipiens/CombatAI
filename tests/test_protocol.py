@@ -49,6 +49,42 @@ class ProtocolTests(unittest.TestCase):
         )
         self.assertEqual(snapshot.revision, 7)
         self.assertEqual(snapshot.items[0].path[-1], "Play recording")
+        self.assertTrue(snapshot.items[0].executable)
+
+    def test_parses_display_only_standard_radio_item(self) -> None:
+        snapshot = MenuSnapshot.from_message(
+            {
+                "v": 1,
+                "type": "menu_snapshot",
+                "revision": 8,
+                "items": [
+                    {
+                        "action_id": "radio.1.4.2",
+                        "label": "Break Left",
+                        "path": ["Wingman", "Maneuvers", "Break Left"],
+                        "executable": False,
+                    }
+                ],
+            }
+        )
+        self.assertFalse(snapshot.items[0].executable)
+
+    def test_rejects_non_boolean_executable_flag(self) -> None:
+        with self.assertRaisesRegex(ProtocolError, "executable"):
+            MenuSnapshot.from_message(
+                {
+                    "type": "menu_snapshot",
+                    "revision": 1,
+                    "items": [
+                        {
+                            "action_id": "radio.1",
+                            "label": "Break Left",
+                            "path": ["Wingman", "Break Left"],
+                            "executable": "no",
+                        }
+                    ],
+                }
+            )
 
     def test_rejects_duplicate_actions(self) -> None:
         item = {"action_id": "f10.1", "label": "A", "path": ["A"]}

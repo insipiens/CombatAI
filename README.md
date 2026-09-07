@@ -4,25 +4,28 @@ CombatAI is intended to remove radio-menu interaction from DCS World mission pla
 Its eventual runtime path is HOTAS PTT, local speech recognition, deterministic command
 routing, optional Gemini interpretation, DCS execution, and short local speech output.
 
-This repository contains the first technical proof—access to the live, mission-generated
-F10 menu over localhost UDP—and Windows microphone selection. It does not yet contain audio
-recording, STT, Gemini or TTS.
+This repository contains the first technical proof—access to selected live DCS radio-menu
+branches over localhost UDP—plus Windows microphone capture and local speech recognition.
+It does not yet contain transcript matching, standard radio-command execution, Gemini, or TTS.
 
 ## Current proof of concept
 
-The DCS Lua hook:
+The DCS Lua hook currently exports the live Wingman, Flight, Second Element, ATC, and
+mission-generated F10 branches. It:
 
-- reads `data.menuOther` inside the radio-dialogue environment;
+- reads the already-instantiated `data.rootItem` inside the radio-dialogue environment;
 - flattens selectable entries into paths without exporting functions or arbitrary DCS state;
 - emits a new snapshot only when the menu changes;
-- accepts only an action from the same live menu revision;
-- calls `missionCommands.doAction` for that validated action;
+- marks standard radio commands as display-only;
+- accepts only a validated F10 action from the same live menu revision;
+- calls `missionCommands.doAction` only for that validated F10 action;
 - returns an explicit acceptance or rejection;
 - binds its receiver to `127.0.0.1` only.
 
-The Python console prints the menu and permits numbered selection. An `accepted` result means
-that the Lua call completed; DCS does not expose whether the campaign script subsequently
-produced its intended effect.
+The Python console prints all in-scope branches. It permits numbered selection only for F10
+entries and explicitly refuses display-only standard commands. An `accepted` result means that
+the Lua call completed; DCS does not expose whether the campaign script subsequently produced
+its intended effect.
 
 ## Experimental Windows setup
 
@@ -166,7 +169,7 @@ The first run downloads and verifies the official whisper.cpp Windows x64 build 
 release it to print the locally recognised text and elapsed transcription time. The temporary
 WAV passed to the separate whisper.cpp process is deleted immediately afterward.
 
-Speech recognition is currently independent of the F10 console. Transcript matching and
+Speech recognition is currently independent of the radio console. Transcript matching and
 voice-triggered execution have deliberately not been added yet.
 
 Start the Windows-side listener before entering a DCS mission:
@@ -175,9 +178,10 @@ Start the Windows-side listener before entering a DCS mission:
 .\run.bat
 ```
 
-Then start DCS and load a mission containing F10 options. The console should print the current
-menu hierarchy. Enter its displayed number to invoke an item, `R` to request a new snapshot,
-or `Q` to stop the console.
+Then start DCS and load a mission. The console should print the current Wingman, Flight,
+Second Element, ATC, and F10 hierarchy. Standard entries are labelled `[display only]` and
+cannot yet be invoked. Enter the number of an F10 entry to invoke it, `R` to request a new
+snapshot, or `Q` to stop the console.
 
 If no menu arrives:
 
@@ -214,7 +218,7 @@ These deliberately avoid the existing DCS Shaker port (`34382`) and VAICOM's por
 The proof is successful only when it can:
 
 1. report that a mission is active;
-2. display the actual current campaign F10 hierarchy;
+2. display the current in-scope standard radio and campaign F10 hierarchy;
 3. detect a menu change without restarting;
 4. reject a selection from the previous revision;
 5. invoke a current entry and receive an acknowledgement;
