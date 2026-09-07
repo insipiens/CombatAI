@@ -25,6 +25,7 @@ class BootstrapTests(unittest.TestCase):
     def test_entry_points_use_only_private_python(self) -> None:
         for filename in (
             "install.bat",
+            "configuration.bat",
             "microphone.bat",
             "recording-test.bat",
             "run.bat",
@@ -34,6 +35,16 @@ class BootstrapTests(unittest.TestCase):
             content = (ROOT / filename).read_text(encoding="utf-8")
             self.assertIn("runtime\\python.exe", content, filename)
             self.assertNotIn("py -", content.lower(), filename)
+
+    def test_sdl_controller_runtime_is_pinned_and_hash_verified(self) -> None:
+        setup = (ROOT / "setup.ps1").read_text(encoding="utf-8")
+        self.assertIn('$PygameVersion = "2.5.8"', setup)
+        self.assertIn("pygame_ce-2.5.8-cp313-cp313-win_amd64.whl", setup)
+        match = re.search(r'\$PygameSha256 = "([0-9a-f]+)"', setup)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(len(match.group(1)), 64)
+        self.assertIn("pygame.version.ver", setup)
 
     def test_stt_setup_pins_and_verifies_binary_and_model(self) -> None:
         setup = (ROOT / "setup-stt.ps1").read_text(encoding="utf-8")

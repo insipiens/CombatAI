@@ -111,7 +111,7 @@ class MicrophoneTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text("not json", encoding="utf-8")
-            with self.assertRaisesRegex(OSError, "Refusing to overwrite"):
+            with self.assertRaisesRegex(OSError, "Cannot read CombatAI configuration"):
                 save_selection(Microphone(0, "Mic", 1), path)
             self.assertEqual(path.read_text(encoding="utf-8"), "not json")
 

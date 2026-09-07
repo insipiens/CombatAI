@@ -7,13 +7,13 @@ import argparse
 import ctypes
 from ctypes import wintypes
 from dataclasses import asdict, dataclass
-import json
 import math
-import os
 from pathlib import Path
 import sys
 import time
 from typing import Callable, Iterator, Protocol, Sequence
+
+from .configuration_store import config_path, load_document, save_document
 
 
 MMSYSERR_NOERROR = 0
@@ -225,43 +225,17 @@ def _meter_fraction(level: float) -> float:
     return max(0.0, min(1.0, (20 * math.log10(level) + 60) / 60))
 
 
-def config_path() -> Path:
-    root = os.environ.get("LOCALAPPDATA")
-    if not root:
-        raise OSError("Windows LOCALAPPDATA is not available.")
-    return Path(root) / "CombatAI" / "config.json"
-
-
 def load_selection(path: Path | None = None) -> dict[str, object] | None:
-    target = path or config_path()
-    try:
-        document = json.loads(target.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise OSError(f"Cannot read microphone configuration {target}: {exc}") from exc
+    document = load_document(path)
     microphone = document.get("microphone")
     return microphone if isinstance(microphone, dict) else None
 
 
 def save_selection(microphone: Microphone, path: Path | None = None) -> Path:
     target = path or config_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    document: dict[str, object] = {"schema": 1}
-    if target.exists():
-        try:
-            existing = json.loads(target.read_text(encoding="utf-8"))
-            if isinstance(existing, dict):
-                document.update(existing)
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise OSError(
-                f"Refusing to overwrite unreadable configuration {target}: {exc}"
-            ) from exc
+    document = load_document(target)
     document["microphone"] = asdict(microphone)
-    temporary = target.with_suffix(target.suffix + ".new")
-    temporary.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
-    os.replace(temporary, target)
-    return target
+    return save_document(document, target)
 
 
 def display_labels(devices: Sequence[Microphone]) -> list[str]:

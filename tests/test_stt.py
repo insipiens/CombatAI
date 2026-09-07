@@ -9,6 +9,10 @@ from combatai.stt import MODEL_NAME, WhisperCpp
 
 
 class SttTests(unittest.TestCase):
+    def test_installed_model_filename_is_configurable(self) -> None:
+        recognizer = WhisperCpp(Path("test-root"), model_name="ggml-small.en.bin")
+        self.assertEqual(recognizer.model.name, "ggml-small.en.bin")
+
     def test_missing_installation_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             recognizer = WhisperCpp(Path(directory))

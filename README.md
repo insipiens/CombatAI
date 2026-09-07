@@ -4,9 +4,10 @@ CombatAI is intended to remove radio-menu interaction from DCS World mission pla
 Its eventual runtime path is HOTAS PTT, local speech recognition, deterministic command
 routing, optional Gemini interpretation, DCS execution, and short local speech output.
 
-This repository contains the first technical proof—access to selected live DCS radio-menu
-branches over localhost UDP—plus Windows microphone capture and local speech recognition.
-It does not yet contain HOTAS PTT, continuous operation, Gemini, or TTS.
+This repository contains the first working vertical slice: access to selected live DCS
+radio-menu branches over localhost UDP, Windows microphone capture, local speech recognition,
+deterministic matching, guarded execution, and SDL HOTAS push-to-talk. It does not yet contain
+Gemini or TTS.
 
 ## Current proof of concept
 
@@ -47,9 +48,10 @@ only while installing or removing that hook; running CombatAI does not require e
 
 Python does not need to be installed on Windows. Run `setup.bat` once. It downloads the
 official CPython 3.13.15 x64 embeddable package into `CombatAI\runtime`, verifies the
-published SHA-256 before extraction, and configures it to see only the application source and
-standard library. It does not install Python system-wide, alter `PATH`, use the Microsoft
-Store, or install `pip`.
+published SHA-256 before extraction, and configures it to see only the application source,
+standard library, and a pinned pygame-ce wheel. pygame-ce supplies SDL controller access for
+DirectInput/XInput HOTAS devices and is also checksum-verified. Setup does not install Python
+system-wide, alter `PATH`, use the Microsoft Store, or install `pip`.
 
 ```text
 .\setup.bat
@@ -135,6 +137,28 @@ restoration.
 
 ### Run the proof of concept
 
+Open the local configuration front end:
+
+```powershell
+.\configuration.bat
+```
+
+It opens `127.0.0.1:34385` in the default browser. The page selects and tests the recording
+device, configures the command-match floor and required lead over the runner-up, chooses among
+installed Whisper models, and learns a HOTAS button. HOTAS learning snapshots every attached
+SDL controller and assigns the first newly pressed button after setup starts; controls already
+held are ignored. Release completes the assignment, after which the page shows its live state.
+Space remains available alongside a configured HOTAS button.
+
+Settings remain under `%LOCALAPPDATA%\CombatAI\config.json`. The initial execution gate is a
+70% text-similarity score with a 10-point lead over the next candidate. These are similarity
+scores, not calibrated probabilities. The front end constrains both settings to bounded ranges.
+
+CombatAI writes a readable rotating log and structured JSONL events beneath
+`%LOCALAPPDATA%\CombatAI\logs`. Voice events include the transcript, top candidates, scores,
+timings, selected action, menu revision, rejection reason, and DCS acknowledgement. Captured
+audio is not logged or retained.
+
 Choose the microphone CombatAI will use:
 
 ```powershell
@@ -189,11 +213,12 @@ Execute one tightly gated voice command against the live catalogue:
 .\voice-command-test.bat
 ```
 
-Only one unambiguous match scoring at least 90% is sent. DCS rebuilds and revalidates the
-catalogue revision immediately before dispatch; a changed menu, ambiguity, weaker match, or
-missing action is refused. The process waits for a mission, then remains active for repeated
-commands until Escape or Ctrl+C. Each accepted command executes immediately after recognition
-without asking for confirmation.
+Only an unambiguous match passing both configured gates is sent. DCS rebuilds and revalidates
+the catalogue revision immediately before dispatch; a changed menu, ambiguity, weak or closely
+competing match, or missing action is refused. The process waits for a mission, then remains
+active for repeated commands until Escape or Ctrl+C. Each accepted command executes immediately
+after recognition without asking for confirmation. Hold either the configured HOTAS button or
+Space while speaking and release it to transcribe.
 
 Before each transcription, CombatAI supplies whisper.cpp with a bounded, deduplicated vocabulary
 prompt generated from the current live catalogue. This biases recognition toward current

@@ -1,0 +1,262 @@
+"""Local browser configuration for microphone, matching, Whisper, and HOTAS PTT."""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+import math
+import os
+from pathlib import Path
+import secrets
+from typing import Any
+import webbrowser
+
+from .configuration_store import (
+    MINIMUM_LEAD_RANGE,
+    MINIMUM_SCORE_RANGE,
+    config_path,
+    load_document,
+    save_document,
+    update_settings,
+)
+from .event_log import log_directory, recent_events, write_event
+from .hotas import SdlHotasInput, learn_binding, resolve_binding, wait_for_release
+from .microphone import WinMmAudioInput
+from .stt import PROJECT_ROOT
+
+
+HOST = "127.0.0.1"
+PORT = 34385
+
+
+class ConfigurationApplication:
+    def __init__(self) -> None:
+        os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+        self.audio = WinMmAudioInput()
+        self.hotas = SdlHotasInput()
+
+    def status(self) -> dict[str, Any]:
+        document = load_document()
+        controllers = self.hotas.devices()
+        models = {path.name for path in (PROJECT_ROOT / "stt").glob("ggml-*.bin")}
+        models.add(str(document["stt"]["model"]))
+        return {
+            "config": document,
+            "config_path": str(config_path()),
+            "log_path": str(log_directory()),
+            "microphones": [asdict(device) for device in self.audio.microphones()],
+            "controllers": [asdict(device) for device in controllers],
+            "models": sorted(models),
+            "score_range": MINIMUM_SCORE_RANGE,
+            "lead_range": MINIMUM_LEAD_RANGE,
+            "events": recent_events(30),
+        }
+
+    def save(self, request: dict[str, Any]) -> dict[str, Any]:
+        microphones = self.audio.microphones()
+        microphone_id = request.get("microphone_id")
+        microphone = next((item for item in microphones if item.device_id == microphone_id), None)
+        if microphone is None:
+            raise ValueError("Select a currently connected microphone.")
+        model = request.get("model")
+        available_models = {path.name for path in (PROJECT_ROOT / "stt").glob("ggml-*.bin")}
+        available_models.add(str(load_document()["stt"]["model"]))
+        if model not in available_models:
+            raise ValueError("Select an installed Whisper model.")
+        document = update_settings(
+            load_document(),
+            minimum_score=request.get("minimum_score"),
+            minimum_lead=request.get("minimum_lead"),
+            model=model,
+            microphone=asdict(microphone),
+        )
+        target = save_document(document)
+        write_event("configuration_saved", message=str(target))
+        return self.status()
+
+    def learn_hotas(self) -> dict[str, Any]:
+        binding = learn_binding(self.hotas, timeout=20.0)
+        wait_for_release(self.hotas, binding)
+        document = load_document()
+        document["ptt"] = binding.document()
+        save_document(document)
+        write_event("ptt_assigned", ptt=f"{binding.name} button {binding.button}")
+        return {"binding": binding.document(), "status": self.status()}
+
+    def use_keyboard(self) -> dict[str, Any]:
+        document = load_document()
+        document["ptt"] = {"mode": "keyboard"}
+        save_document(document)
+        write_event("ptt_assigned", ptt="SPACE")
+        return self.status()
+
+    def ptt_state(self) -> dict[str, Any]:
+        document = load_document()
+        ptt = document["ptt"]
+        if ptt["mode"] != "hotas":
+            return {"configured": False, "pressed": False}
+        binding = resolve_binding(self.hotas.devices(), ptt)
+        pressed = binding.button in self.hotas.pressed_buttons(binding.device_id)
+        return {
+            "configured": True,
+            "pressed": pressed,
+            "label": f"{binding.name} button {binding.button}",
+        }
+
+    def microphone_test(self, request: dict[str, Any]) -> dict[str, Any]:
+        microphone_id = request.get("microphone_id")
+        microphone = next(
+            (item for item in self.audio.microphones() if item.device_id == microphone_id),
+            None,
+        )
+        if microphone is None:
+            raise ValueError("Select a currently connected microphone.")
+        levels = list(self.audio.levels(microphone.device_id, 3.0))
+        peak = max(levels, default=0.0)
+        average = sum(levels) / len(levels) if levels else 0.0
+        return {"peak_dbfs": _dbfs(peak), "average_dbfs": _dbfs(average)}
+
+
+def _dbfs(level: float) -> float | None:
+    return round(20 * math.log10(level), 1) if level > 0 else None
+
+
+class ConfigurationHandler(BaseHTTPRequestHandler):
+    server: "ConfigurationServer"
+
+    def do_GET(self) -> None:
+        try:
+            if self.path == "/":
+                self._html(PAGE.replace("__TOKEN__", self.server.token))
+            elif self.path == "/api/status":
+                self._json(self.server.application.status())
+            elif self.path == "/api/ptt-state":
+                self._json(self.server.application.ptt_state())
+            elif self.path == "/api/logs":
+                self._json({"events": recent_events(100)})
+            else:
+                self.send_error(HTTPStatus.NOT_FOUND)
+        except (OSError, ValueError) as exc:
+            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def do_POST(self) -> None:
+        if self.headers.get("X-CombatAI-Token") != self.server.token:
+            self._json({"error": "Invalid local configuration token."}, HTTPStatus.FORBIDDEN)
+            return
+        try:
+            request = self._request_json()
+            if self.path == "/api/settings":
+                result = self.server.application.save(request)
+            elif self.path == "/api/hotas/learn":
+                result = self.server.application.learn_hotas()
+            elif self.path == "/api/hotas/keyboard":
+                result = self.server.application.use_keyboard()
+            elif self.path == "/api/microphone/test":
+                result = self.server.application.microphone_test(request)
+            else:
+                self.send_error(HTTPStatus.NOT_FOUND)
+                return
+            self._json(result)
+        except (OSError, ValueError, TimeoutError) as exc:
+            self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+
+    def _request_json(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length > 64 * 1024:
+            raise ValueError("Request is too large.")
+        try:
+            value = json.loads(self.rfile.read(length) or b"{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError("Request is not valid JSON.") from exc
+        if not isinstance(value, dict):
+            raise ValueError("Request must be a JSON object.")
+        return value
+
+    def _json(self, value: object, status: HTTPStatus = HTTPStatus.OK) -> None:
+        payload = json.dumps(value, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def _html(self, value: str) -> None:
+        payload = value.encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
+class ConfigurationServer(HTTPServer):
+    def __init__(self, application: ConfigurationApplication) -> None:
+        super().__init__((HOST, PORT), ConfigurationHandler)
+        self.application = application
+        self.token = secrets.token_urlsafe(24)
+
+
+def main() -> int:
+    try:
+        application = ConfigurationApplication()
+        server = ConfigurationServer(application)
+        address = f"http://{HOST}:{PORT}/"
+        print("CombatAI configuration")
+        print(f"Opening {address}")
+        print(f"Configuration: {config_path()}")
+        print(f"Logs: {log_directory()}")
+        print("Close this window or press Ctrl+C when setup is complete.")
+        webbrowser.open(address)
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nConfiguration closed.")
+        return 0
+    except OSError as exc:
+        print(f"Configuration failed: {exc}")
+        return 2
+
+
+PAGE = r'''<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CombatAI configuration</title>
+<style>
+:root{color-scheme:dark;--bg:#0d1117;--panel:#161b22;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--ok:#3fb950;--bad:#f85149}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif}.wrap{max-width:980px;margin:auto;padding:32px 20px}h1{margin:0 0 4px;font-size:28px}h2{font-size:18px;margin:0 0 18px}.sub,.hint{color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}.wide{grid-column:1/-1}label{display:block;margin:14px 0 6px}select,input[type=range],button{width:100%}select,button{background:#21262d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px}button{cursor:pointer;font-weight:600;margin-top:10px}button.primary{background:#1f6feb;border-color:#388bfd}button:hover{border-color:var(--accent)}.value{float:right;color:var(--accent)}.status{margin-top:12px;padding:10px;border-radius:6px;background:#0d1117;min-height:42px}.pressed{background:#123d20;color:#7ee787}.error{color:#ff7b72}.paths{font-size:12px;color:var(--muted);word-break:break-all}.log{max-height:280px;overflow:auto;font:12px/1.5 ui-monospace,monospace;background:#0d1117;padding:10px;border-radius:6px}.log div{border-bottom:1px solid #21262d;padding:3px 0}@media(max-width:720px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+</style></head><body><main class="wrap"><h1>CombatAI</h1><div class="sub">Local voice-command configuration</div>
+<div class="grid">
+<section class="card"><h2>Microphone</h2><label for="microphone">Recording device</label><select id="microphone"></select><button id="micTest">Run three-second level test</button><div id="micResult" class="status">No test run.</div></section>
+<section class="card"><h2>Push to talk</h2><div id="pttCurrent" class="status">Loading…</div><div id="controllers" class="hint"></div><button id="learnPtt" class="primary">Learn a HOTAS button</button><button id="keyboardPtt">Use Space only</button><div class="hint">Learning ignores controls already held when scanning starts. Press and release the desired button.</div></section>
+<section class="card"><h2>Command matching</h2><label>Minimum match <span id="scoreValue" class="value"></span></label><input id="score" type="range" step="0.01"><label>Minimum lead over runner-up <span id="leadValue" class="value"></span></label><input id="lead" type="range" step="0.01"><div class="hint">Both conditions must pass before a command is sent.</div></section>
+<section class="card"><h2>Speech recognition</h2><label for="model">Installed Whisper model</label><select id="model"></select><div class="hint">Live DCS vocabulary prompting remains enabled because it materially improved recognition.</div></section>
+<section class="card wide"><button id="save" class="primary">Save configuration</button><div id="saveResult" class="status">No unsaved changes.</div><div id="paths" class="paths"></div></section>
+<section class="card wide"><h2>Recent activity</h2><div id="logs" class="log">No events yet.</div></section>
+</div></main><script>
+const token='__TOKEN__';let state=null;let learning=false;
+const $=id=>document.getElementById(id);const pct=n=>Math.round(n*100)+'%';
+async function api(path,body){const options=body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CombatAI-Token':token},body:JSON.stringify(body)};const response=await fetch(path,options);const value=await response.json();if(!response.ok)throw new Error(value.error||'Request failed');return value}
+function option(select,value,label){const node=document.createElement('option');node.value=value;node.textContent=label;select.appendChild(node)}
+function render(s){state=s;const c=s.config;$('microphone').innerHTML='';s.microphones.forEach(m=>option($('microphone'),m.device_id,m.name));if(c.microphone)$('microphone').value=c.microphone.device_id;$('score').min=s.score_range[0];$('score').max=s.score_range[1];$('score').value=c.matching.minimum_score;$('lead').min=s.lead_range[0];$('lead').max=s.lead_range[1];$('lead').value=c.matching.minimum_lead;values();$('model').innerHTML='';s.models.forEach(m=>option($('model'),m,m));$('model').value=c.stt.model;const p=c.ptt;$('pttCurrent').textContent=p.mode==='hotas'?`${p.name} — button ${p.button}`:'Space keyboard';$('controllers').textContent=s.controllers.length?s.controllers.map(d=>`${d.name} (${d.button_count} buttons)`).join(' · '):'No SDL controllers detected.';$('paths').textContent=`Configuration: ${s.config_path} · Logs: ${s.log_path}`;renderLogs(s.events)}
+function values(){$('scoreValue').textContent=pct(+$('score').value);$('leadValue').textContent=pct(+$('lead').value)}
+function renderLogs(events){const box=$('logs');box.innerHTML='';if(!events.length){box.textContent='No events yet.';return}events.slice().reverse().forEach(e=>{const row=document.createElement('div');row.textContent=`${e.timestamp||''}  ${e.event||''}  ${e.transcript||e.message||e.reason||''}`;box.appendChild(row)})}
+async function load(){try{render(await api('/api/status'))}catch(e){$('saveResult').textContent=e.message;$('saveResult').classList.add('error')}}
+$('score').oninput=values;$('lead').oninput=values;
+$('save').onclick=async()=>{try{const s=await api('/api/settings',{microphone_id:+$('microphone').value,minimum_score:+$('score').value,minimum_lead:+$('lead').value,model:$('model').value});render(s);$('saveResult').textContent='Configuration saved.'}catch(e){$('saveResult').textContent=e.message;$('saveResult').classList.add('error')}};
+$('micTest').onclick=async()=>{try{$('micResult').textContent='Speak normally for three seconds…';const r=await api('/api/microphone/test',{microphone_id:+$('microphone').value});$('micResult').textContent=`Average ${r.average_dbfs??'silence'} dBFS · peak ${r.peak_dbfs??'silence'} dBFS`}catch(e){$('micResult').textContent=e.message;$('micResult').classList.add('error')}};
+$('learnPtt').onclick=async()=>{learning=true;try{$('pttCurrent').textContent='Scanning all controllers—press and release the desired button…';const r=await api('/api/hotas/learn',{});render(r.status);$('pttCurrent').textContent=`Saved ${r.binding.name} — button ${r.binding.button}. Press it again to test.`}catch(e){$('pttCurrent').textContent=e.message;$('pttCurrent').classList.add('error')}finally{learning=false}};
+$('keyboardPtt').onclick=async()=>{try{render(await api('/api/hotas/keyboard',{}))}catch(e){$('pttCurrent').textContent=e.message}};
+setInterval(async()=>{if(learning||!state||state.config.ptt.mode!=='hotas')return;try{const r=await api('/api/ptt-state');$('pttCurrent').classList.toggle('pressed',r.pressed);if(r.pressed)$('pttCurrent').textContent=`${r.label} — PRESSED`;else $('pttCurrent').textContent=`${r.label} — ready`}catch(e){}},120);
+setInterval(async()=>{if(learning)return;try{renderLogs((await api('/api/logs')).events)}catch(e){}},5000);load();
+</script></body></html>'''
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

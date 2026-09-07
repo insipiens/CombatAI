@@ -15,6 +15,7 @@ from combatai.matcher import (
 from combatai.protocol import MenuItem
 from combatai.voice_command_test import (
     MINIMUM_EXECUTION_SCORE,
+    MINIMUM_EXECUTION_LEAD,
     execution_candidate,
     wait_for_catalogue,
 )
@@ -80,17 +81,17 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.best.item.action_id, "radio.5.1.1")  # type: ignore[union-attr]
         self.assertGreaterEqual(result.best.score, MINIMUM_EXECUTION_SCORE)  # type: ignore[union-attr]
 
-    def test_observed_wingman_error_finds_best_path_without_rewriting(self) -> None:
+    def test_misheard_recipient_without_clear_lead_is_not_executed(self) -> None:
         result = match_catalogue("Women break left", ITEMS)
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "radio.1.4.2")  # type: ignore[union-attr]
-        self.assertLess(result.best.score, MINIMUM_EXECUTION_SCORE)  # type: ignore[union-attr]
+        self.assertIsNone(execution_candidate(result))
 
     def test_observed_air_sea_error_finds_best_path_without_rewriting(self) -> None:
         result = match_catalogue("Contact SC Rescue", ITEMS)
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "f10.10.1")  # type: ignore[union-attr]
-        self.assertLess(result.best.score, MINIMUM_EXECUTION_SCORE)  # type: ignore[union-attr]
+        self.assertIsNotNone(execution_candidate(result))
 
     def test_live_vocabulary_prompt_prioritizes_path_levels_and_deduplicates(self) -> None:
         prompt = build_vocabulary_prompt(ITEMS)
@@ -126,6 +127,24 @@ class MatcherTests(unittest.TestCase):
             "matched",
             (RankedMatch(ITEMS[0], MINIMUM_EXECUTION_SCORE - 0.01),),
         )
+        self.assertIsNone(execution_candidate(result))
+
+    def test_unique_lower_score_with_clear_lead_is_eligible(self) -> None:
+        best = RankedMatch(ITEMS[1], 0.89)
+        runner_up = RankedMatch(ITEMS[0], 0.65)
+        result = MatchResult("matched", (best,), (best, runner_up))
+        self.assertEqual(execution_candidate(result), best)
+
+    def test_observed_great_left_transcript_passes_margin_gate(self) -> None:
+        result = match_catalogue("Wingman, Great Left", ITEMS)
+        candidate = execution_candidate(result)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.item.action_id, "radio.1.4.2")  # type: ignore[union-attr]
+
+    def test_lower_score_with_narrow_lead_is_not_eligible(self) -> None:
+        best = RankedMatch(ITEMS[1], 0.78)
+        runner_up = RankedMatch(ITEMS[0], 0.78 - MINIMUM_EXECUTION_LEAD + 0.01)
+        result = MatchResult("matched", (best,), (best, runner_up))
         self.assertIsNone(execution_candidate(result))
 
     def test_ambiguous_match_is_not_eligible_for_execution(self) -> None:

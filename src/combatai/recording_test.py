@@ -9,7 +9,7 @@ from io import BytesIO
 import math
 import sys
 import time
-from typing import Sequence
+from typing import Protocol, Sequence
 import wave
 
 from .microphone import (
@@ -55,6 +55,63 @@ class WindowsKeys:
             self._kernel32.FlushConsoleInputBuffer(handle)
 
 
+class PushToTalk(Protocol):
+    label: str
+
+    def wait_for_press(self) -> None: ...
+    def is_down(self) -> bool: ...
+    def flush(self) -> None: ...
+
+
+class SpacePushToTalk:
+    label = "SPACE"
+
+    def __init__(self, keys: WindowsKeys) -> None:
+        self.keys = keys
+
+    def wait_for_press(self) -> None:
+        self.keys.wait_for_space()
+
+    def is_down(self) -> bool:
+        return self.keys.is_down(VK_SPACE)
+
+    def flush(self) -> None:
+        self.keys.flush_console_input()
+
+
+class SpaceOrHotasPushToTalk:
+    """Use Space or one learned HOTAS button, latching the source per utterance."""
+
+    def __init__(self, keys: WindowsKeys, hotas: object) -> None:
+        self.keys = keys
+        self.hotas = hotas
+        self._active = ""
+        self.label = f"SPACE or {getattr(hotas, 'label')}"
+
+    def wait_for_press(self) -> None:
+        self._active = ""
+        while True:
+            if self.keys.is_down(VK_ESCAPE):
+                raise KeyboardInterrupt
+            if self.keys.is_down(VK_SPACE):
+                self._active = "space"
+                return
+            if getattr(self.hotas, "is_down")():
+                self._active = "hotas"
+                return
+            time.sleep(0.01)
+
+    def is_down(self) -> bool:
+        if self._active == "space":
+            return self.keys.is_down(VK_SPACE)
+        if self._active == "hotas":
+            return bool(getattr(self.hotas, "is_down")())
+        return False
+
+    def flush(self) -> None:
+        self.keys.flush_console_input()
+
+
 def _wav_bytes(pcm: bytes) -> bytes:
     output = BytesIO()
     with wave.open(output, "wb") as recording:
@@ -79,13 +136,28 @@ def capture_while_space(
     *,
     maximum_seconds: float,
 ) -> bytes:
-    keys.wait_for_space()
+    return capture_while_ptt(
+        audio,
+        microphone,
+        SpacePushToTalk(keys),
+        maximum_seconds=maximum_seconds,
+    )
+
+
+def capture_while_ptt(
+    audio: WinMmAudioInput,
+    microphone: Microphone,
+    ptt: PushToTalk,
+    *,
+    maximum_seconds: float,
+) -> bytes:
+    ptt.wait_for_press()
     deadline = time.monotonic() + maximum_seconds
     chunks: list[bytes] = []
     captured_bytes = 0
 
     def keep_recording() -> bool:
-        return keys.is_down(VK_SPACE) and time.monotonic() < deadline
+        return ptt.is_down() and time.monotonic() < deadline
 
     for payload in audio.pcm_chunks(microphone.device_id, keep_recording):
         chunks.append(payload)
@@ -93,11 +165,11 @@ def capture_while_space(
         duration = captured_bytes / (SAMPLE_RATE * 2)
         print(f"\rRecording... {duration:4.1f} seconds", end="", flush=True)
 
-    keys.flush_console_input()
+    ptt.flush()
     pcm = b"".join(chunks)
     duration = len(pcm) / (SAMPLE_RATE * 2)
     if duration < 0.1:
-        raise OSError("No usable audio was captured; hold SPACE for longer and try again.")
+        raise OSError(f"No usable audio was captured; hold {ptt.label} for longer and try again.")
     level = _pcm16_level(pcm)
     dbfs = 20 * math.log10(level) if level > 0 else -math.inf
     print(f"\rCaptured {duration:.1f} seconds; average {dbfs:.1f} dBFS.          ")

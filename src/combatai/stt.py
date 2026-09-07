@@ -20,11 +20,14 @@ class WhisperCpp:
         self,
         root: Path = PROJECT_ROOT,
         *,
+        model_name: str = MODEL_NAME,
         runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     ) -> None:
         self.directory = root / "stt"
         self.executable = self.directory / "whisper-cli.exe"
-        self.model = self.directory / MODEL_NAME
+        if Path(model_name).name != model_name:
+            raise ValueError("Whisper model must be a filename")
+        self.model = self.directory / model_name
         self._runner = runner
 
     def validate(self) -> None:
