@@ -1,23 +1,29 @@
-# Piper development patch
+# Piper spoken command reference
 
-This branch adds short local speech output and application-side spoken queries over the live DCS radio hierarchy.
+CombatAI includes short local speech output and application-side spoken queries over the live DCS radio hierarchy.
 
 ## Setup
 
-Run:
+From PowerShell, run the normal CombatAI setup:
 
-```bat
-setup-tts.bat
+```powershell
+.\setup.bat
 ```
 
-The development setup downloads the pinned standalone Windows Piper build from the archived MIT-licensed `rhasspy/piper` release `2023.11.14-2`, plus the `en_GB-alan-medium` voice and config from `rhasspy/piper-voices` v1.0.0. The published voice-file MD5 values are checked after download.
+`setup.bat` is idempotent and prepares the private Python/SDL runtime, local whisper.cpp speech recognition, and Piper speech output. `setup-tts.bat` remains available as a TTS-only diagnostic/setup command:
 
-The Piper release itself did not publish a digest for the Windows ZIP, so the binary archive cannot currently receive the same checksum verification used by CombatAI's Python and pygame bootstrap. This is acceptable for the development patch but should be resolved before packaging a release.
+```powershell
+.\setup-tts.bat
+```
 
-Then run the existing live voice-command test:
+The TTS setup downloads the standalone Windows Piper build from the archived MIT-licensed `rhasspy/piper` release `2023.11.14-2`, plus a revision-pinned `en_GB-alan-medium` voice and config from `rhasspy/piper-voices`. The published voice-file MD5 values are checked after download.
 
-```bat
-voice-command-test.bat
+The Piper release itself did not publish a digest for the Windows ZIP, so the binary archive cannot currently receive the same checksum verification used by CombatAI's Python and pygame bootstrap. This should be resolved before packaging a release.
+
+Then run the live voice-command test:
+
+```powershell
+.\voice-command-test.bat
 ```
 
 ## Spoken application commands
