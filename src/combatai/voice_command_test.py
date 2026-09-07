@@ -8,14 +8,16 @@ import sys
 import time
 from typing import Sequence
 
-from .dcs_client import DcsMenuClient
+from .alias_store import record_pending_alias
 from .audio_cues import play_cue
+from .command_reference import list_node_children, parse_meta_command, spoken_listing
 from .configuration_store import load_document
+from .dcs_client import DcsMenuClient
 from .event_log import write_event
 from .hotas import HotasButton, SdlHotasInput, resolve_binding
 from .matcher import MatchResult, RankedMatch, build_vocabulary_prompt, match_catalogue
 from .matching_test import _print_result
-from .microphone import WinMmAudioInput, load_selection, resolve_selection
+from .microphone import WinMmAudioInput, _pcm16_level, load_selection, resolve_selection
 from .recording_test import (
     SAMPLE_RATE,
     SpaceOrHotasPushToTalk,
@@ -23,12 +25,13 @@ from .recording_test import (
     WindowsKeys,
     capture_while_ptt,
 )
-from .microphone import _pcm16_level
 from .stt import WhisperCpp
+from .tts import InterruptingPushToTalk, PiperSpeech
 
 
 MINIMUM_EXECUTION_SCORE = 0.70
 MINIMUM_EXECUTION_LEAD = 0.10
+MINIMUM_ALIAS_CANDIDATE_SCORE = 0.50
 
 
 def execution_candidate(
@@ -83,17 +86,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         cue_volume = float(feedback_settings["cue_volume"])
         recognizer = WhisperCpp(model_name=str(stt_settings["model"]))
         recognizer.validate()
+        speech = PiperSpeech()
+        speech.validate()
         if ptt_settings["mode"] == "hotas":
             hotas_source = SdlHotasInput()
             binding = resolve_binding(hotas_source.devices(), ptt_settings)
-            ptt = SpaceOrHotasPushToTalk(keys, HotasButton(hotas_source, binding))
+            base_ptt = SpaceOrHotasPushToTalk(keys, HotasButton(hotas_source, binding))
         else:
-            ptt = SpacePushToTalk(keys)
+            base_ptt = SpacePushToTalk(keys)
+        ptt = InterruptingPushToTalk(base_ptt, speech)
 
         print("CombatAI live voice-command test")
         print(f"Microphone: {microphone.name}")
         print(f"Push to talk: {ptt.label}")
         print(f"Execution gate: {minimum_score:.0%} match, {minimum_lead:.0%} lead")
+        print("Piper speech output: ready")
         print("Waiting for the live DCS radio catalogue...", flush=True)
         write_event(
             "session_started",
@@ -104,6 +111,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             minimum_lead=minimum_lead,
             audio_cues=cues_enabled,
             cue_volume=cue_volume,
+            piper_model=str(speech.model),
         )
         with DcsMenuClient() as client:
             wait_for_catalogue(client)
@@ -140,8 +148,51 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if cues_enabled:
                         play_cue("rejected", volume=cue_volume)
                     continue
+
                 print(f"\nHeard: {transcript}")
                 print(f"Transcription time: {elapsed:.2f} seconds")
+
+                meta = parse_meta_command(transcript)
+                if meta is not None:
+                    if meta.kind == "repeat":
+                        if speech.repeat():
+                            response = speech.last_text
+                            print(f"CombatAI: {response}")
+                            write_event(
+                                "meta_command",
+                                command="repeat",
+                                transcript=transcript,
+                                response=response,
+                                revision=snapshot.revision,
+                            )
+                        else:
+                            print("Nothing to repeat.")
+                            write_event(
+                                "meta_command",
+                                command="repeat",
+                                transcript=transcript,
+                                reason="nothing_to_repeat",
+                                revision=snapshot.revision,
+                            )
+                        continue
+
+                    assert meta.node is not None
+                    listing = list_node_children(snapshot.items, meta.node)
+                    response = spoken_listing(listing)
+                    print(f"CombatAI: {response}")
+                    speech.speak(response)
+                    write_event(
+                        "meta_command",
+                        command="list_commands",
+                        transcript=transcript,
+                        node=meta.node,
+                        resolved_node=listing.node if listing.status == "found" else None,
+                        children=list(listing.children),
+                        response=response,
+                        revision=snapshot.revision,
+                    )
+                    continue
+
                 match = match_catalogue(transcript, snapshot.items)
                 _print_result(match)
                 candidate = execution_candidate(
@@ -179,6 +230,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                             reason = "not_executable"
                     else:
                         reason = match.status
+                    alias_recorded = bool(
+                        match.best is not None
+                        and match.best.score >= MINIMUM_ALIAS_CANDIDATE_SCORE
+                        and record_pending_alias(transcript)
+                    )
                     print("Nothing was sent to DCS.")
                     write_event(
                         "command_rejected",
@@ -186,6 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         transcript=transcript,
                         revision=snapshot.revision,
                         candidates=ranked,
+                        candidate_alias_recorded=alias_recorded,
                         duration_seconds=round(duration, 3),
                         average_dbfs=round(dbfs, 2) if dbfs is not None else None,
                         transcription_seconds=round(elapsed, 3),
