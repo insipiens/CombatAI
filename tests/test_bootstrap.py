@@ -43,6 +43,10 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("/${ModelName}?download=true", setup)
         self.assertNotIn("/$ModelName?download=true", setup)
         self.assertGreaterEqual(setup.count("Get-FileHash"), 3)
+        self.assertIn("System.Diagnostics.ProcessStartInfo", setup)
+        self.assertIn("RedirectStandardError = $true", setup)
+        self.assertNotIn("& $WhisperExe --help", setup)
+        self.assertNotIn("& $StagedExe --help", setup)
         self.assertNotIn("pip", setup.lower())
 
     def test_installer_elevates_only_mutating_commands(self) -> None:

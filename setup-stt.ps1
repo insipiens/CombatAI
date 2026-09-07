@@ -15,6 +15,33 @@ $ManifestPath = Join-Path $SttDirectory "combatai-stt.json"
 $WhisperExe = Join-Path $SttDirectory "whisper-cli.exe"
 $ModelPath = Join-Path $SttDirectory $ModelName
 
+function Test-WhisperExecutable([string]$Path) {
+    $StartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $StartInfo.FileName = $Path
+    $StartInfo.Arguments = "--help"
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+    $StartInfo.CreateNoWindow = $true
+    $Process = New-Object System.Diagnostics.Process
+    $Process.StartInfo = $StartInfo
+    try {
+        if (-not $Process.Start()) {
+            return $false
+        }
+        $null = $Process.StandardOutput.ReadToEnd()
+        $null = $Process.StandardError.ReadToEnd()
+        $Process.WaitForExit()
+        return $Process.ExitCode -eq 0
+    }
+    catch {
+        return $false
+    }
+    finally {
+        $Process.Dispose()
+    }
+}
+
 function Test-CombatAiStt {
     if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf) -or
         -not (Test-Path -LiteralPath $WhisperExe -PathType Leaf) -or
@@ -32,8 +59,7 @@ function Test-CombatAiStt {
         if ((Get-FileHash -LiteralPath $ModelPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ModelSha256) {
             return $false
         }
-        & $WhisperExe --help *> $null
-        return $LASTEXITCODE -eq 0
+        return Test-WhisperExecutable $WhisperExe
     }
     catch {
         return $false
@@ -89,8 +115,7 @@ try {
     $Manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $StagingDirectory "combatai-stt.json") -Encoding UTF8
 
     $StagedExe = Join-Path $StagingDirectory "whisper-cli.exe"
-    & $StagedExe --help *> $null
-    if ($LASTEXITCODE -ne 0) {
+    if (-not (Test-WhisperExecutable $StagedExe)) {
         throw "The extracted whisper.cpp executable failed its self-test."
     }
 
