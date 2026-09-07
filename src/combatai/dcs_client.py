@@ -43,7 +43,6 @@ class DcsMenuClient:
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.bind((listen_host, listen_port))
         self._socket.settimeout(0.25)
-        self._suppress_windows_udp_connection_reset()
         self.snapshot: MenuSnapshot | None = None
         self.last_seen_monotonic: float | None = None
         self._results: dict[str, ActionResult] = {}
@@ -155,15 +154,3 @@ class DcsMenuClient:
     @staticmethod
     def _request_id() -> str:
         return secrets.token_hex(8)
-
-    def _suppress_windows_udp_connection_reset(self) -> None:
-        """Ask Winsock not to surface ICMP port-unreachable as ConnectionResetError."""
-        if not hasattr(self._socket, "ioctl"):
-            return
-        sio_udp_connreset = 0x9800000C
-        try:
-            self._socket.ioctl(sio_udp_connreset, False)
-        except (OSError, TypeError):
-            # receive_once still handles WSAECONNRESET if this undocumented Winsock
-            # control code is unavailable on a future Python or Windows version.
-            LOG.debug("Winsock UDP reset suppression is unavailable", exc_info=True)
