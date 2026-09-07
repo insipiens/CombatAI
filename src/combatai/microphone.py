@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import sys
 import time
-from typing import Iterator, Protocol, Sequence
+from typing import Callable, Iterator, Protocol, Sequence
 
 
 MMSYSERR_NOERROR = 0
@@ -127,6 +127,15 @@ class WinMmAudioInput:
         return devices
 
     def levels(self, device_id: int, seconds: float) -> Iterator[float]:
+        deadline = time.monotonic() + seconds
+        for payload in self.pcm_chunks(
+            device_id, lambda: time.monotonic() < deadline
+        ):
+            yield _pcm16_level(payload)
+
+    def pcm_chunks(
+        self, device_id: int, should_continue: Callable[[], bool]
+    ) -> Iterator[bytes]:
         sample_rate = 16_000
         samples_per_buffer = 1_600
         byte_count = samples_per_buffer * 2
@@ -168,14 +177,13 @@ class WinMmAudioInput:
                     "queue capture buffer",
                 )
             self._check(self._api.waveInStart(handle), "start microphone")
-            deadline = time.monotonic() + seconds
-            while time.monotonic() < deadline:
+            while should_continue():
                 emitted = False
                 for buffer, header in zip(buffers, headers):
                     if header.dwFlags & WHDR_DONE:
                         emitted = True
                         payload = bytes(buffer[: header.dwBytesRecorded])
-                        yield _pcm16_level(payload)
+                        yield payload
                         header.dwBytesRecorded = 0
                         self._check(
                             self._api.waveInAddBuffer(
@@ -266,6 +274,24 @@ def display_labels(devices: Sequence[Microphone]) -> list[str]:
         else device.name
         for device in devices
     ]
+
+
+def resolve_selection(
+    devices: Sequence[Microphone], saved: dict[str, object] | None
+) -> Microphone:
+    if not saved:
+        raise OSError("No microphone has been selected. Run microphone.bat first.")
+    saved_id = saved.get("device_id")
+    saved_name = saved.get("name")
+    for device in devices:
+        if (device.device_id, device.name) == (saved_id, saved_name):
+            return device
+    same_name = [device for device in devices if device.name == saved_name]
+    if len(same_name) == 1:
+        return same_name[0]
+    raise OSError(
+        "The saved microphone is no longer available. Run microphone.bat to select it again."
+    )
 
 
 def choose_microphone(

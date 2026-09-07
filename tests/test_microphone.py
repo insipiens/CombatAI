@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
 from pathlib import Path
 import tempfile
 import unittest
+import wave
 
 from combatai.microphone import (
     Microphone,
@@ -11,8 +13,10 @@ from combatai.microphone import (
     _pcm16_level,
     display_labels,
     load_selection,
+    resolve_selection,
     save_selection,
 )
+from combatai.recording_test import _wav_bytes
 
 
 class MicrophoneTests(unittest.TestCase):
@@ -41,6 +45,37 @@ class MicrophoneTests(unittest.TestCase):
                 "Webcam",
             ],
         )
+
+    def test_saved_device_is_resolved_by_id_and_name(self) -> None:
+        devices = [Microphone(2, "Headset", 1), Microphone(3, "Webcam", 1)]
+        self.assertEqual(
+            resolve_selection(devices, {"device_id": 2, "name": "Headset"}),
+            devices[0],
+        )
+
+    def test_saved_device_follows_unique_name_if_ids_change(self) -> None:
+        devices = [Microphone(8, "Headset", 1), Microphone(3, "Webcam", 1)]
+        self.assertEqual(
+            resolve_selection(devices, {"device_id": 2, "name": "Headset"}),
+            devices[0],
+        )
+
+    def test_missing_saved_device_is_rejected(self) -> None:
+        with self.assertRaisesRegex(OSError, "no longer available"):
+            resolve_selection(
+                [Microphone(3, "Webcam", 1)],
+                {"device_id": 2, "name": "Headset"},
+            )
+
+    def test_playback_payload_is_a_mono_16khz_wave(self) -> None:
+        payload = _wav_bytes(b"\x00\x00" * 160)
+        self.assertEqual(payload[:4], b"RIFF")
+        self.assertEqual(payload[8:12], b"WAVE")
+        with wave.open(BytesIO(payload), "rb") as recording:
+            self.assertEqual(recording.getnchannels(), 1)
+            self.assertEqual(recording.getsampwidth(), 2)
+            self.assertEqual(recording.getframerate(), 16_000)
+            self.assertEqual(recording.getnframes(), 160)
 
     def test_selection_round_trip_preserves_other_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

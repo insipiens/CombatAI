@@ -145,7 +145,17 @@ It captures only the short-lived audio needed to calculate the meter; it does no
 play back audio. Run it again whenever the desired device changes. To inspect devices without
 changing the saved choice, use `.\microphone.bat --list`.
 
-Microphone selection is currently independent of the F10 console. Speech recognition and
+Test capture from the saved microphone:
+
+```powershell
+.\recording-test.bat
+```
+
+Hold the space bar while speaking and release it to hear the captured audio once through the
+current Windows default output. The test keeps the recording only in memory and imposes a
+30-second maximum. It does not yet recognise speech or invoke DCS actions.
+
+Microphone capture is currently independent of the F10 console. Speech recognition and
 voice-triggered execution have deliberately not been added yet.
 
 Start the Windows-side listener before entering a DCS mission:
