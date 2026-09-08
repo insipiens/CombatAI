@@ -166,8 +166,9 @@ Repeat
 
 `List` speaks the immediate choices without changing the DCS display. `Show` opens the
 corresponding DCS menu without speaking or selecting a command. While that menu is visible,
-saying a displayed submenu name navigates deeper; saying a displayed leaf command executes it
-normally. For example: `Show ATC`, `Biggin Hill`, `Request Start-Up`. List, show, submenu
+another `Show` command can open a displayed submenu; saying a displayed leaf command executes
+it normally. For example: `Show ATC` opens the DCS F5 ATC menu, `Show Biggin Hill` opens that
+airfield's submenu, and `Request Start-Up` executes the displayed command. List, show, submenu
 navigation, and repeat cannot fall through to executable action matching.
 
 ## Developer diagnostics

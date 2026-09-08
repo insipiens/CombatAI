@@ -195,16 +195,28 @@ Show F10
 ```
 
 `List` makes Alan speak the immediate choices without changing the on-screen DCS menu. `Show`
-opens the requested DCS menu without speaking its choices. Once a menu is visible, you may say
-a displayed submenu name to move deeper or say a displayed leaf command to execute it.
+opens the requested DCS menu without speaking its choices. You can use another `Show` command
+to move into a displayed submenu, then say a displayed leaf command to execute it.
 
 For example:
 
 ```text
 Show ATC
-Biggin Hill
+```
+
+Opens the DCS **F5 ATC** menu.
+
+```text
+Show Biggin Hill
+```
+
+Opens the **Biggin Hill** submenu within ATC.
+
+```text
 Request Start-Up
 ```
+
+Executes the displayed command.
 
 CombatAI sends a command only when the recognition result passes both configured safety gates.
 An accepted response confirms that DCS ran the menu action; a mission script can still decide
