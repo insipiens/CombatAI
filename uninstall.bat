@@ -10,7 +10,7 @@ if not exist "%~dp0runtime\python.exe" (
 "%~dp0runtime\python.exe" "%~dp0tools\install.py" uninstall --purge %*
 if errorlevel 1 exit /b %ERRORLEVEL%
 
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\purge-local.ps1" -ProjectRoot "%~dp0"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\purge-local.ps1" -ProjectRoot "%~dp0."
 if errorlevel 1 exit /b %ERRORLEVEL%
 
 echo CombatAI uninstall is complete. The source folder can now be deleted.
