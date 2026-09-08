@@ -6,6 +6,7 @@ from combatai.command_reference import (
     MetaCommand,
     list_node_children,
     parse_meta_command,
+    resolve_menu_navigation,
     spoken_listing,
 )
 from combatai.protocol import MenuItem
@@ -20,6 +21,13 @@ ITEMS = (
     MenuItem("6", "Cover", ("Flight", "Cover Me")),
     MenuItem("7", "Bandits", ("Flight", "Engage", "Engage Bandits")),
     MenuItem("8", "Bandits", ("Second Element", "Engage", "Engage Bandits")),
+)
+
+NAVIGATION_ITEMS = ITEMS + (
+    MenuItem("menu.5", "ATC", ("ATC",), executable=False),
+    MenuItem("menu.5.1", "Ford", ("ATC", "Ford"), executable=False),
+    MenuItem("menu.5.2", "Tangmere", ("ATC", "Tangmere"), executable=False),
+    MenuItem("menu.10", "Other", ("Other",), executable=False),
 )
 
 
@@ -37,6 +45,17 @@ class CommandReferenceTests(unittest.TestCase):
 
     def test_parses_safe_list_shorthand(self) -> None:
         self.assertEqual(parse_meta_command("F10 commands."), MetaCommand("list", "f10"))
+
+    def test_parses_show_query_without_turning_it_into_a_list(self) -> None:
+        for phrase in ("Show F10", "Display F10 commands", "Open F10 menu"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(parse_meta_command(phrase), MetaCommand("show", "f10"))
+
+    def test_every_show_prefix_is_protected_from_action_matching(self) -> None:
+        self.assertEqual(
+            parse_meta_command("Show imaginary commands"),
+            MetaCommand("show", "imaginary"),
+        )
 
     def test_every_list_prefix_is_a_meta_command(self) -> None:
         self.assertEqual(parse_meta_command("List of a Command."), MetaCommand("list", "of a"))
@@ -113,6 +132,36 @@ class CommandReferenceTests(unittest.TestCase):
             spoken_listing(listing),
             "No Ground Crew commands are currently available.",
         )
+
+    def test_show_f10_resolves_the_visual_other_menu(self) -> None:
+        navigation = resolve_menu_navigation(NAVIGATION_ITEMS, "F10")
+        self.assertEqual(navigation.status, "found")
+        self.assertEqual(navigation.menu_id, "menu.10")
+        self.assertEqual(navigation.path, ("Other",))
+
+    def test_show_nested_menu_resolves_globally(self) -> None:
+        navigation = resolve_menu_navigation(NAVIGATION_ITEMS, "Ford")
+        self.assertEqual(navigation.menu_id, "menu.5.1")
+        self.assertEqual(navigation.path, ("ATC", "Ford"))
+
+    def test_visible_menu_limits_plain_navigation_to_immediate_children(self) -> None:
+        navigation = resolve_menu_navigation(
+            NAVIGATION_ITEMS,
+            "Ford",
+            current_path=("ATC",),
+        )
+        self.assertEqual(navigation.menu_id, "menu.5.1")
+        leaf = resolve_menu_navigation(
+            NAVIGATION_ITEMS,
+            "Startup",
+            current_path=("ATC", "Ford"),
+        )
+        self.assertEqual(leaf.status, "not_found")
+
+    def test_show_top_level_opens_radio_root(self) -> None:
+        navigation = resolve_menu_navigation(NAVIGATION_ITEMS, None)
+        self.assertEqual(navigation.menu_id, "menu.root")
+        self.assertEqual(navigation.path, ())
 
 
 if __name__ == "__main__":

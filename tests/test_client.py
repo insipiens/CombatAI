@@ -69,6 +69,25 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(result.accepted)
         self.assertEqual(received_ids, [request_id, request_id])
 
+    def test_open_menu_sends_a_revision_checked_non_executable_request(self) -> None:
+        server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server.bind(("127.0.0.1", 0))
+        server.settimeout(1.0)
+        server_port = server.getsockname()[1]
+        try:
+            with DcsMenuClient(listen_port=0, dcs_port=server_port) as client:
+                request_id = client.open_menu("menu.5.1", revision=7)
+                payload, _ = server.recvfrom(65535)
+                message = json.loads(payload)
+        finally:
+            server.close()
+
+        self.assertEqual(message["type"], "open_menu")
+        self.assertEqual(message["request_id"], request_id)
+        self.assertEqual(message["menu_id"], "menu.5.1")
+        self.assertEqual(message["revision"], 7)
+        self.assertNotIn("action_id", message)
+
 
 if __name__ == "__main__":
     unittest.main()

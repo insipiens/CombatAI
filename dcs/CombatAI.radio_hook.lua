@@ -28,6 +28,7 @@ do
         signature = nil,
         items = {},
         actions = {},
+        menus = {},
         last_poll = 0,
         last_heartbeat = 0,
         recent_results = {},
@@ -112,7 +113,20 @@ do
         return result
     end
 
-    local function cai_walk_menu(menu, path, indexes, scope, items, actions, signature_parts)
+    local function cai_record_menu(path, indexes, items, menus, signature_parts)
+        local menu_id = "menu." .. cai_base.table.concat(indexes, ".")
+        menus[menu_id] = {indexes = indexes}
+        items[#items + 1] = {
+            action_id = menu_id,
+            label = path[#path],
+            path = path,
+            executable = false,
+        }
+        signature_parts[#signature_parts + 1] =
+            menu_id .. "\30" .. cai_base.table.concat(path, "\31") .. "\30false"
+    end
+
+    local function cai_walk_menu(menu, path, indexes, scope, items, actions, menus, signature_parts)
         if not menu or cai_base.type(menu.items) ~= "table" then
             return
         end
@@ -124,6 +138,7 @@ do
                 local item_indexes = cai_copy_indexes(indexes, index)
                 local submenu = cai_submenu(item)
                 if submenu then
+                    cai_record_menu(item_path, item_indexes, items, menus, signature_parts)
                     cai_walk_menu(
                         submenu,
                         item_path,
@@ -131,6 +146,7 @@ do
                         scope,
                         items,
                         actions,
+                        menus,
                         signature_parts
                     )
                 elseif cai_base.type(item.command) == "table" then
@@ -167,6 +183,9 @@ do
     local function cai_capture_menu(force_send)
         local items = {}
         local actions = {}
+        local menus = {
+            ["menu.root"] = {indexes = {}},
+        }
         local signature_parts = {}
         if data and data.initialized and data.rootItem then
             local root = cai_submenu(data.rootItem)
@@ -178,6 +197,7 @@ do
                         local label = cai_label(item.name)
                         local submenu = cai_submenu(item)
                         if submenu then
+                            cai_record_menu({label}, {slot}, items, menus, signature_parts)
                             cai_walk_menu(
                                 submenu,
                                 {label},
@@ -185,6 +205,7 @@ do
                                 slot == 10 and "f10" or "radio",
                                 items,
                                 actions,
+                                menus,
                                 signature_parts
                             )
                         end
@@ -199,6 +220,7 @@ do
             cai_state.signature = signature
             cai_state.items = items
             cai_state.actions = actions
+            cai_state.menus = menus
             force_send = true
         end
 
@@ -248,6 +270,17 @@ do
         end
     end
 
+    local function cai_open_menu(menu)
+        if cai_base.type(menu.indexes) ~= "table" then
+            cai_base.error("invalid CombatAI menu")
+        end
+        commandDialogsPanel.switchToMainMenu(self)
+        for _, index in cai_base.ipairs(menu.indexes) do
+            commandDialogsPanel.selectMenuItem(self, index)
+        end
+        setShowMenu(true)
+    end
+
     local function cai_process(raw)
         if not raw or #raw > cai_max_datagram then
             return
@@ -276,7 +309,7 @@ do
             cai_capture_menu(true)
             return
         end
-        if message.type ~= "execute" then
+        if message.type ~= "execute" and message.type ~= "open_menu" then
             cai_result(request_id, false, "unknown_message", "Unsupported request type")
             return
         end
@@ -288,22 +321,37 @@ do
             cai_capture_menu(true)
             return
         end
-        local action = cai_state.actions[message.action_id]
-        if action == nil then
-            cai_result(request_id, false, "unknown_action", "Action is not in the current menu")
-            return
+        local operation
+        local accepted_code
+        local accepted_detail
+        if message.type == "open_menu" then
+            local menu = cai_state.menus[message.menu_id]
+            if menu == nil then
+                cai_result(request_id, false, "unknown_menu", "Menu is not in the current catalogue")
+                return
+            end
+            operation = function()
+                cai_open_menu(menu)
+            end
+            accepted_code = "menu_opened"
+            accepted_detail = "DCS opened the current radio submenu"
+        else
+            local action = cai_state.actions[message.action_id]
+            if action == nil then
+                cai_result(request_id, false, "unknown_action", "Action is not in the current menu")
+                return
+            end
+            operation = function()
+                cai_execute_action(action)
+            end
+            accepted_code = "accepted"
+            accepted_detail =
+                "DCS accepted the current menu action; downstream mission effects are not observable"
         end
 
-        local executed, error_message = cai_base.pcall(function()
-            cai_execute_action(action)
-        end)
+        local executed, error_message = cai_base.pcall(operation)
         if executed then
-            cai_result(
-                request_id,
-                true,
-                "accepted",
-                "DCS accepted the current menu action; downstream mission effects are not observable"
-            )
+            cai_result(request_id, true, accepted_code, accepted_detail)
             cai_capture_menu(false)
         else
             cai_result(request_id, false, "dcs_error", cai_base.tostring(error_message))

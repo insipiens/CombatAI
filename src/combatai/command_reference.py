@@ -21,6 +21,8 @@ _KNOWN_ROOTS = {
 }
 _TOP_LEVEL_REQUESTS = {"", "all", "categories", "category", "toplevel"}
 _COMMAND_WORDS = {"command", "commands", "cabans"}
+_SHOW_WORDS = {"show", "display", "open"}
+_MENU_WORDS = {"menu", "menus"}
 _MINIMUM_NODE_SCORE = 0.72
 _MINIMUM_NODE_LEAD = 0.10
 
@@ -36,6 +38,14 @@ class NodeListing:
     status: str
     node: str | None
     children: tuple[str, ...] = ()
+    choices: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class MenuNavigation:
+    status: str
+    menu_id: str | None = None
+    path: tuple[str, ...] = ()
     choices: tuple[str, ...] = ()
 
 
@@ -56,6 +66,15 @@ def parse_meta_command(transcript: str) -> MetaCommand | None:
     words = normalised.split()
     if not words:
         return None
+
+    if words[0] in _SHOW_WORDS:
+        words = words[1:]
+        if words and words[-1] in (_COMMAND_WORDS | _MENU_WORDS):
+            words = words[:-1]
+        node = " ".join(words)
+        if _compact(node) in _TOP_LEVEL_REQUESTS:
+            node = ""
+        return MetaCommand("show", node=node or None)
 
     # Treat every utterance beginning with "list" as informational.  A
     # malformed list request must never fall through to live action matching.
@@ -166,6 +185,84 @@ def list_node_children(
         display = path[0] if path is not None else "F10"
         return NodeListing("unavailable", display)
     return NodeListing(status, requested_node, choices=choices)
+
+
+def resolve_menu_navigation(
+    items: tuple[MenuItem, ...],
+    requested_node: str | None,
+    *,
+    current_path: tuple[str, ...] | None = None,
+) -> MenuNavigation:
+    """Resolve a spoken submenu without ever returning an executable leaf."""
+    if requested_node is None:
+        return MenuNavigation("found", "menu.root")
+
+    menu_items = tuple(item for item in items if not item.executable)
+    wanted = _compact(requested_node)
+    f10_request = wanted in _F10_REQUESTS
+    if f10_request:
+        candidates = tuple(
+            item
+            for item in menu_items
+            if len(item.path) == 1 and _compact(item.path[0]) in _F10_ROOT_LABELS
+        )
+    elif current_path is not None:
+        candidates = tuple(
+            item
+            for item in menu_items
+            if len(item.path) == len(current_path) + 1
+            and item.path[: len(current_path)] == current_path
+        )
+    else:
+        candidates = menu_items
+    if f10_request:
+        exact = candidates
+    else:
+        exact = tuple(
+            item
+            for item in candidates
+            if wanted in {_compact(_display_path(item.path)), _compact(item.path[-1])}
+        )
+    if len(exact) == 1:
+        return MenuNavigation("found", exact[0].action_id, exact[0].path)
+    if len(exact) > 1:
+        return MenuNavigation(
+            "ambiguous",
+            choices=tuple(_display_path(item.path) for item in exact),
+        )
+
+    if current_path is None and wanted in _KNOWN_ROOTS:
+        return MenuNavigation("unavailable", path=(_KNOWN_ROOTS[wanted],))
+    if current_path is None and wanted in _F10_REQUESTS:
+        return MenuNavigation("unavailable", path=("F10",))
+
+    normalised_wanted = _normalise(requested_node)
+    ranked = [
+        (
+            max(
+                SequenceMatcher(
+                    None, normalised_wanted, _normalise(_display_path(item.path))
+                ).ratio(),
+                SequenceMatcher(None, normalised_wanted, _normalise(item.path[-1])).ratio(),
+            ),
+            item,
+        )
+        for item in candidates
+    ]
+    ranked.sort(key=lambda candidate: (-candidate[0], candidate[1].action_id))
+    if not ranked or ranked[0][0] < _MINIMUM_NODE_SCORE:
+        return MenuNavigation("not_found")
+
+    best_score = ranked[0][0]
+    contenders = tuple(
+        item for score, item in ranked if best_score - score < _MINIMUM_NODE_LEAD
+    )
+    if len(contenders) > 1:
+        return MenuNavigation(
+            "ambiguous",
+            choices=tuple(_display_path(item.path) for item in contenders),
+        )
+    return MenuNavigation("found", contenders[0].action_id, contenders[0].path)
 
 
 def spoken_listing(listing: NodeListing) -> str:

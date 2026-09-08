@@ -47,6 +47,22 @@ class RadioHookTests(unittest.TestCase):
         self.assertIn("commandDialogsPanel.switchToMainMenu(self)", self.source)
         self.assertIn("commandDialogsPanel.selectMenuItem(self, index)", self.source)
 
+    def test_submenus_are_exported_as_non_executable_navigation_nodes(self) -> None:
+        self.assertIn('action_id = menu_id', self.source)
+        self.assertIn('executable = false', self.source)
+        self.assertIn('["menu.root"] = {indexes = {}}', self.source)
+
+    def test_open_menu_uses_a_separate_revision_checked_operation(self) -> None:
+        self.assertIn('message.type ~= "execute" and message.type ~= "open_menu"', self.source)
+        self.assertIn('local menu = cai_state.menus[message.menu_id]', self.source)
+        self.assertIn('accepted_code = "menu_opened"', self.source)
+        self.assertIn("setShowMenu(true)", self.source)
+        capture = self.source.index("cai_capture_menu(false)", self.source.index('message.type ~= "execute"'))
+        validation = self.source.index("message.revision ~= cai_state.revision")
+        lookup = self.source.index("cai_state.menus[message.menu_id]")
+        self.assertLess(capture, validation)
+        self.assertLess(validation, lookup)
+
     def test_catalogue_is_recaptured_before_revision_validation(self) -> None:
         capture = self.source.index("cai_capture_menu(false)", self.source.index('message.type ~= "execute"'))
         validation = self.source.index("message.revision ~= cai_state.revision")

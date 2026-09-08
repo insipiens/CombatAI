@@ -83,6 +83,18 @@ class DcsMenuClient:
         self._pending[request_id] = payload
         return request_id
 
+    def open_menu(self, menu_id: str, revision: int) -> str:
+        """Open a live DCS submenu without selecting an executable command."""
+        request_id = self._request_id()
+        payload = self._send(
+            "open_menu",
+            request_id=request_id,
+            menu_id=menu_id,
+            revision=revision,
+        )
+        self._pending[request_id] = payload
+        return request_id
+
     def receive_once(self) -> dict[str, Any] | None:
         try:
             payload, address = self._socket.recvfrom(65_535)

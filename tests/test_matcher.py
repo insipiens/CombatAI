@@ -18,6 +18,7 @@ from combatai.protocol import MenuItem
 from combatai.voice_command_test import (
     MINIMUM_EXECUTION_SCORE,
     MINIMUM_EXECUTION_LEAD,
+    contextual_catalogue,
     execution_candidate,
     remember_catalogue,
     unavailable_candidate,
@@ -210,6 +211,26 @@ class MatcherTests(unittest.TestCase):
         item = MenuItem("legacy.1", "Test", ("Test",), executable=False)
         result = MatchResult("matched", (RankedMatch(item, 1.0),))
         self.assertIsNone(execution_candidate(result))
+
+    def test_visible_submenu_disambiguates_a_repeated_leaf(self) -> None:
+        scoped = contextual_catalogue(ITEMS, ("ATC", "Biggin Hill"))
+        result = match_catalogue("Request Start-Up", scoped)
+        candidate = execution_candidate(result)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.item.action_id, "radio.5.1.1")  # type: ignore[union-attr]
+
+    def test_visible_submenu_never_adds_navigation_nodes_to_action_matching(self) -> None:
+        menu = MenuItem("menu.5.1", "Biggin Hill", ("ATC", "Biggin Hill"), False)
+        scoped = contextual_catalogue(ITEMS + (menu,), ("ATC", "Biggin Hill"))
+        self.assertTrue(scoped)
+        self.assertTrue(all(item.executable for item in scoped))
+
+    def test_navigation_nodes_are_not_remembered_as_unavailable_actions(self) -> None:
+        menu = MenuItem("menu.5", "ATC", ("ATC",), False)
+        known = {}
+        remember_catalogue(known, (menu, ITEMS[5]))
+        self.assertNotIn(menu.path, known)
+        self.assertIn(ITEMS[5].path, known)
 
     def test_startup_wait_retries_until_catalogue_arrives(self) -> None:
         class WaitingClient:

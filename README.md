@@ -20,6 +20,7 @@ CombatAI currently provides:
 
 - live command discovery from DCS over localhost UDP;
 - standard radio and mission-generated commands from the active menu;
+- voice navigation of the visible DCS radio menu without selecting an action;
 - guarded execution against the same live catalogue revision;
 - safe recovery when the DCS menu changes during recognition;
 - Windows microphone selection and SDL HOTAS push-to-talk;
@@ -155,10 +156,16 @@ Useful local spoken commands include:
 List flight commands
 List ATC commands
 List mission commands
+Show ATC commands
+Show F10
 Repeat
 ```
 
-List and repeat commands do not send a DCS action.
+`List` speaks the immediate choices without changing the DCS display. `Show` opens the
+corresponding DCS menu without speaking or selecting a command. While that menu is visible,
+saying a displayed submenu name navigates deeper; saying a displayed leaf command executes it
+normally. For example: `Show ATC`, `Biggin Hill`, `Request Start-Up`. List, show, submenu
+navigation, and repeat cannot fall through to executable action matching.
 
 ## Diagnostics
 
