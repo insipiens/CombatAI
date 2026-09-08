@@ -14,6 +14,12 @@ def pending_alias_path() -> Path:
     return base / "CombatAI" / "pending_aliases.json"
 
 
+def pending_meta_alias_path() -> Path:
+    local = os.environ.get("LOCALAPPDATA")
+    base = Path(local) if local else Path.home() / ".combatai"
+    return base / "CombatAI" / "pending_meta_aliases.json"
+
+
 def _key(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", text.casefold())).strip()
 
@@ -44,3 +50,8 @@ def record_pending_alias(transcript: str, path: Path | None = None) -> bool:
     temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     temporary.replace(target)
     return True
+
+
+def record_pending_meta_alias(transcript: str, path: Path | None = None) -> bool:
+    """Record an unresolved application command separately from DCS action aliases."""
+    return record_pending_alias(transcript, path or pending_meta_alias_path())

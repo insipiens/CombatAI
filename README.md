@@ -196,9 +196,8 @@ pipeline is stable:
 
 12. Add a light, configurable radio/intercom DSP effect to Alan while preserving
     intelligibility.
-13. Carry explicit command provenance from Lua and search nested DCS menu nodes by normalized
-    name, including the semantic mission-command source and its spoken `F10`/`Other`
-    aliases.
+13. Carry explicit command provenance from Lua instead of relying on the current live
+    `F10`/`Other` application-side alias.
 14. Use the JSONL measurements from real sorties to decide whether GPU recognition and larger
     models improve command accuracy enough to justify their latency, RAM/VRAM use, and DCS
     contention.

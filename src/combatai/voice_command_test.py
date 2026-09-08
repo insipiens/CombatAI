@@ -8,7 +8,7 @@ import sys
 import time
 from typing import Sequence
 
-from .alias_store import record_pending_alias
+from .alias_store import record_pending_alias, record_pending_meta_alias
 from .audio_cues import play_cue
 from .command_reference import list_node_children, parse_meta_command, spoken_listing
 from .configuration_store import load_document
@@ -197,11 +197,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                             )
                         continue
 
-                    assert meta.node is not None
                     listing = list_node_children(snapshot.items, meta.node)
                     response = spoken_listing(listing)
                     print(f"CombatAI: {response}")
                     speech.speak(response)
+                    meta_alias_recorded = bool(
+                        listing.status == "not_found" and record_pending_meta_alias(transcript)
+                    )
                     write_event(
                         "meta_command",
                         command="list_commands",
@@ -209,6 +211,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         node=meta.node,
                         resolved_node=listing.node if listing.status == "found" else None,
                         children=list(listing.children),
+                        choices=list(listing.choices),
+                        candidate_meta_alias_recorded=meta_alias_recorded,
                         response=response,
                         revision=snapshot.revision,
                     )

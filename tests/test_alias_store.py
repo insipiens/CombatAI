@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from combatai.alias_store import record_pending_alias
+from combatai.alias_store import record_pending_alias, record_pending_meta_alias
 
 
 class AliasStoreTests(unittest.TestCase):
@@ -24,6 +24,12 @@ class AliasStoreTests(unittest.TestCase):
                 json.loads(path.read_text(encoding="utf-8")),
                 {"contact rescue": "Contact Air Sea Rescue"},
             )
+
+    def test_meta_aliases_use_a_separate_store(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pending_meta_aliases.json"
+            self.assertTrue(record_pending_meta_alias("List of a Command", path))
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"list of a command": None})
 
 
 if __name__ == "__main__":
