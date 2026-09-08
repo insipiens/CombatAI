@@ -21,6 +21,7 @@ CombatAI currently provides:
 - live command discovery from DCS over localhost UDP;
 - standard radio and mission-generated commands from the active menu;
 - voice navigation of the visible DCS radio menu without selecting an action;
+- spoken F11 Previous Menu and F12 Exit controls;
 - guarded execution against the same live catalogue revision;
 - safe recovery when the DCS menu changes during recognition;
 - Windows microphone selection and SDL HOTAS push-to-talk;
@@ -161,6 +162,8 @@ List ATC commands
 List mission commands
 Show ATC commands
 Show F10
+Previous Menu
+Exit Menu
 Repeat
 ```
 
@@ -169,7 +172,10 @@ corresponding DCS menu without speaking or selecting a command. While that menu 
 another `Show` command can open a displayed submenu; saying a displayed leaf command executes
 it normally. For example: `Show ATC` opens the DCS F5 ATC menu, `Show Biggin Hill` opens that
 airfield's submenu, and `Request Start-Up` executes the displayed command. List, show, submenu
-navigation, and repeat cannot fall through to executable action matching.
+navigation, F11/F12 controls, and repeat cannot fall through to executable action matching.
+`Previous Menu` (or `F11`) selects DCS's displayed Previous Menu control; `Exit Menu` (or `F12`)
+closes the radio menu. `Repeat` only says Alan's last spoken response again and never repeats an
+executed DCS action.
 
 ## Developer diagnostics
 

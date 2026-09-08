@@ -76,6 +76,16 @@ class CommandReferenceTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertEqual(parse_meta_command(phrase).kind, "repeat")  # type: ignore[union-attr]
 
+    def test_parses_previous_menu_controls(self) -> None:
+        for phrase in ("Previous Menu", "F11", "F-11", "Back", "Show Previous Menu"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(parse_meta_command(phrase), MetaCommand("previous_menu"))
+
+    def test_parses_exit_menu_controls(self) -> None:
+        for phrase in ("Exit", "Exit Menu", "F12", "F-12", "Close Menu", "Show Exit Menu"):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(parse_meta_command(phrase), MetaCommand("exit_menu"))
+
     def test_lists_immediate_children_only(self) -> None:
         listing = list_node_children(ITEMS, "ATC")
         self.assertEqual(listing.status, "found")

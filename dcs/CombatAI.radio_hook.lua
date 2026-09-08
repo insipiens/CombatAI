@@ -281,6 +281,21 @@ do
         setShowMenu(true)
     end
 
+    local function cai_control_menu(operation)
+        if operation == "previous" then
+            -- F11 is DCS's own Previous Menu item in the currently displayed tree.
+            commandDialogsPanel.selectMenuItem(self, 11)
+            setShowMenu(true)
+            return
+        end
+        if operation == "exit" then
+            -- F12 closes the radio menu without selecting an executable action.
+            setShowMenu(false)
+            return
+        end
+        cai_base.error("invalid CombatAI menu control")
+    end
+
     local function cai_process(raw)
         if not raw or #raw > cai_max_datagram then
             return
@@ -309,7 +324,9 @@ do
             cai_capture_menu(true)
             return
         end
-        if message.type ~= "execute" and message.type ~= "open_menu" then
+        if message.type ~= "execute" and
+           message.type ~= "open_menu" and
+           message.type ~= "menu_control" then
             cai_result(request_id, false, "unknown_message", "Unsupported request type")
             return
         end
@@ -324,7 +341,18 @@ do
         local operation
         local accepted_code
         local accepted_detail
-        if message.type == "open_menu" then
+        if message.type == "menu_control" then
+            if message.operation ~= "previous" and message.operation ~= "exit" then
+                cai_result(request_id, false, "unknown_menu_control", "Unsupported menu control")
+                return
+            end
+            operation = function()
+                cai_control_menu(message.operation)
+            end
+            accepted_code = message.operation == "previous" and "previous_menu" or "menu_closed"
+            accepted_detail = message.operation == "previous" and
+                "DCS selected F11 Previous Menu" or "DCS closed the radio menu"
+        elseif message.type == "open_menu" then
             local menu = cai_state.menus[message.menu_id]
             if menu == nil then
                 cai_result(request_id, false, "unknown_menu", "Menu is not in the current catalogue")

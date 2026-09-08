@@ -88,6 +88,29 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(message["revision"], 7)
         self.assertNotIn("action_id", message)
 
+    def test_menu_control_sends_a_revision_checked_request(self) -> None:
+        server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server.bind(("127.0.0.1", 0))
+        server.settimeout(1.0)
+        server_port = server.getsockname()[1]
+        try:
+            with DcsMenuClient(listen_port=0, dcs_port=server_port) as client:
+                request_id = client.control_menu("previous", revision=9)
+                payload, _ = server.recvfrom(65535)
+                message = json.loads(payload)
+        finally:
+            server.close()
+
+        self.assertEqual(message["type"], "menu_control")
+        self.assertEqual(message["request_id"], request_id)
+        self.assertEqual(message["operation"], "previous")
+        self.assertEqual(message["revision"], 9)
+
+    def test_unknown_menu_control_is_not_sent(self) -> None:
+        with DcsMenuClient(listen_port=0) as client:
+            with self.assertRaises(ValueError):
+                client.control_menu("execute", revision=1)
+
 
 if __name__ == "__main__":
     unittest.main()

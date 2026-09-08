@@ -95,6 +95,20 @@ class DcsMenuClient:
         self._pending[request_id] = payload
         return request_id
 
+    def control_menu(self, operation: str, revision: int) -> str:
+        """Select one of DCS's own non-executable menu controls."""
+        if operation not in {"previous", "exit"}:
+            raise ValueError(f"Unsupported DCS menu control: {operation}")
+        request_id = self._request_id()
+        payload = self._send(
+            "menu_control",
+            request_id=request_id,
+            operation=operation,
+            revision=revision,
+        )
+        self._pending[request_id] = payload
+        return request_id
+
     def receive_once(self) -> dict[str, Any] | None:
         try:
             payload, address = self._socket.recvfrom(65_535)

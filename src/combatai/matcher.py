@@ -71,6 +71,12 @@ def build_vocabulary_prompt(
 
     labels: list[str] = []
     seen: set[str] = set()
+    for label in ("Previous Menu", "Exit Menu", "F11", "F12", "Back", "Close Menu"):
+        candidate = prefix + ", ".join((*labels, label)) + "."
+        if len(candidate) > maximum_characters:
+            return prefix + ", ".join(labels) + "." if labels else ""
+        labels.append(label)
+        seen.add(label.casefold())
     maximum_depth = max((len(item.path) for item in items), default=0)
     for depth in range(maximum_depth):
         for item in items:

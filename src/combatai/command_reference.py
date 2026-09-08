@@ -10,6 +10,8 @@ import unicodedata
 from .protocol import MenuItem
 
 _REPEAT = {"repeat", "repeat please", "say again", "say again please"}
+_PREVIOUS_MENU = {"back", "backmenu", "f11", "previous", "previousmenu"}
+_EXIT_MENU = {"close", "closemenu", "exit", "exitmenu", "f12"}
 _F10_ROOT_LABELS = {"f10", "f10other", "other"}
 _F10_REQUESTS = {"f10", "f10other", "otherf10", "other"}
 _KNOWN_ROOTS = {
@@ -60,8 +62,13 @@ def _compact(text: str) -> str:
 
 def parse_meta_command(transcript: str) -> MetaCommand | None:
     normalised = _normalise(transcript)
+    compact = normalised.replace(" ", "")
     if normalised in _REPEAT:
         return MetaCommand("repeat")
+    if compact in _PREVIOUS_MENU:
+        return MetaCommand("previous_menu")
+    if compact in _EXIT_MENU:
+        return MetaCommand("exit_menu")
 
     words = normalised.split()
     if not words:
@@ -72,6 +79,11 @@ def parse_meta_command(transcript: str) -> MetaCommand | None:
         if words and words[-1] in (_COMMAND_WORDS | _MENU_WORDS):
             words = words[:-1]
         node = " ".join(words)
+        compact_node = _compact(node)
+        if compact_node in _PREVIOUS_MENU:
+            return MetaCommand("previous_menu")
+        if compact_node in _EXIT_MENU:
+            return MetaCommand("exit_menu")
         if _compact(node) in _TOP_LEVEL_REQUESTS:
             node = ""
         return MetaCommand("show", node=node or None)

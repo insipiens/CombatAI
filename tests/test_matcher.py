@@ -14,14 +14,17 @@ from combatai.matcher import (
     normalize_phrase,
     strong_semantic_match,
 )
-from combatai.protocol import MenuItem
+from combatai.dcs_client import ActionResult
+from combatai.protocol import MenuItem, MenuSnapshot
 from combatai.voice_command_test import (
     MINIMUM_EXECUTION_SCORE,
     MINIMUM_EXECUTION_LEAD,
     contextual_catalogue,
+    control_live_menu,
     execution_candidate,
     remember_catalogue,
     unavailable_candidate,
+    visible_path_after_menu_control,
     wait_for_catalogue,
 )
 
@@ -111,12 +114,21 @@ class MatcherTests(unittest.TestCase):
         self.assertIn("Wingman", prompt)
         self.assertIn("Biggin Hill", prompt)
         self.assertIn("Contact Air Sea Rescue", prompt)
+        self.assertIn("Previous Menu", prompt)
+        self.assertIn("Exit Menu", prompt)
+        self.assertIn("F11", prompt)
+        self.assertIn("F12", prompt)
         self.assertEqual(prompt.count("Break Left"), 1)
 
     def test_live_vocabulary_prompt_respects_length_limit(self) -> None:
         prompt = build_vocabulary_prompt(ITEMS, maximum_characters=80)
         self.assertLessEqual(len(prompt), 80)
         self.assertTrue(prompt.endswith("."))
+
+    def test_control_vocabulary_exists_without_live_actions(self) -> None:
+        prompt = build_vocabulary_prompt(())
+        self.assertIn("Previous Menu", prompt)
+        self.assertIn("Exit Menu", prompt)
 
     def test_unrelated_speech_does_not_match(self) -> None:
         result = match_catalogue("What is the weather tomorrow", ITEMS)
@@ -224,6 +236,45 @@ class MatcherTests(unittest.TestCase):
         scoped = contextual_catalogue(ITEMS + (menu,), ("ATC", "Biggin Hill"))
         self.assertTrue(scoped)
         self.assertTrue(all(item.executable for item in scoped))
+
+    def test_menu_controls_update_only_known_visual_context(self) -> None:
+        self.assertEqual(
+            visible_path_after_menu_control(("ATC", "Biggin Hill"), "previous"),
+            ("ATC",),
+        )
+        self.assertEqual(visible_path_after_menu_control(("Other",), "previous"), ())
+        self.assertIsNone(visible_path_after_menu_control(None, "previous"))
+        self.assertIsNone(visible_path_after_menu_control(("ATC",), "exit"))
+
+    def test_stale_menu_control_is_retried_against_fresh_revision(self) -> None:
+        initial = MenuSnapshot(3, ITEMS)
+        refreshed = MenuSnapshot(4, ITEMS)
+
+        class ControlClient:
+            def __init__(self) -> None:
+                self.revisions: list[int] = []
+                self.results = [
+                    ActionResult("first", False, "stale_revision", "changed"),
+                    ActionResult("second", True, "previous_menu", ""),
+                ]
+
+            def control_menu(self, _operation: str, revision: int) -> str:
+                self.revisions.append(revision)
+                return str(revision)
+
+            def wait_for_result(self, _request_id: str) -> ActionResult:
+                return self.results.pop(0)
+
+            def request_menu_and_wait(self, timeout: float) -> MenuSnapshot:
+                self.assert_timeout = timeout
+                return refreshed
+
+        client = ControlClient()
+        snapshot, result = control_live_menu(client, initial, "previous")  # type: ignore[arg-type]
+        self.assertEqual(snapshot.revision, 4)
+        self.assertIsNotNone(result)
+        self.assertTrue(result.accepted)  # type: ignore[union-attr]
+        self.assertEqual(client.revisions, [3, 4])
 
     def test_navigation_nodes_are_not_remembered_as_unavailable_actions(self) -> None:
         menu = MenuItem("menu.5", "ATC", ("ATC",), False)

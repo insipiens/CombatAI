@@ -218,6 +218,25 @@ Request Start-Up
 
 Executes the displayed command.
 
+To move back up or close the displayed menu:
+
+```text
+Previous Menu
+```
+
+Selects DCS's displayed **F11 Previous Menu** control.
+
+```text
+Exit Menu
+```
+
+Selects DCS's **F12 Exit** behaviour and closes the radio menu. You may also say `F11`, `Back`,
+`F12`, or `Close Menu` respectively.
+
+`Repeat` only says Alan's last spoken response again, principally after a `List` request. It
+never sends or repeats a DCS action. If Alan has not spoken, CombatAI reports `Nothing spoken
+to repeat.`
+
 CombatAI sends a command only when the recognition result passes both configured safety gates.
 An accepted response confirms that DCS ran the menu action; a mission script can still decide
 what gameplay effect follows.
@@ -291,6 +310,7 @@ improves the overall result without interfering with DCS.
 | The HOTAS is not listed | Connect and power it before opening the configuration page, then restart `configuration.bat`. Use **Space only** as a fallback. |
 | CombatAI waits for DCS indefinitely | Enter an active mission, confirm the installation status is healthy, and make sure only one CombatAI runner is open. |
 | DCS has no CombatAI catalogue | Check `Saved Games\DCS\Logs\dcs.log`. Advanced checks: DCS should own UDP port `34383`, and CombatAI should own `34384`. |
+| `Previous Menu` or `Exit Menu` is rejected as an ordinary command | Rerun `install.bat`; these controls require both the current Windows application and the current DCS hook. |
 | The installer refuses because the panel changed | Stop. Do not overwrite it manually. Preserve the full error/status output; the safety check is protecting a DCS update or another modification. |
 
 Text and JSONL diagnostic logs are stored under `%LOCALAPPDATA%\CombatAI\logs`. Recorded audio

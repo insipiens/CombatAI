@@ -125,6 +125,35 @@ def open_live_menu(
     return refreshed_navigation, refreshed, client.wait_for_result(request_id)
 
 
+def control_live_menu(
+    client: DcsMenuClient,
+    snapshot: MenuSnapshot,
+    operation: str,
+) -> tuple[MenuSnapshot, ActionResult | None]:
+    """Apply one DCS menu control, retrying only after a confirmed stale revision."""
+    request_id = client.control_menu(operation, snapshot.revision)
+    result = client.wait_for_result(request_id)
+    if result is None or result.accepted or result.code != "stale_revision":
+        return snapshot, result
+
+    refreshed = client.request_menu_and_wait(timeout=2.0)
+    if refreshed is None:
+        return snapshot, result
+    request_id = client.control_menu(operation, refreshed.revision)
+    return refreshed, client.wait_for_result(request_id)
+
+
+def visible_path_after_menu_control(
+    visible_path: tuple[str, ...] | None,
+    operation: str,
+) -> tuple[str, ...] | None:
+    if operation == "exit":
+        return None
+    if operation == "previous" and visible_path:
+        return visible_path[:-1]
+    return visible_path
+
+
 def unavailable_candidate(
     transcript: str,
     live_items: tuple[MenuItem, ...],
@@ -296,7 +325,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 revision=snapshot.revision,
                             )
                         else:
-                            print("Nothing to repeat.")
+                            print("Nothing spoken to repeat.")
                             write_event(
                                 "meta_command",
                                 command="repeat",
@@ -306,12 +335,63 @@ def main(argv: Sequence[str] | None = None) -> int:
                             )
                         continue
 
+                    if meta.kind in {"previous_menu", "exit_menu"}:
+                        operation = "previous" if meta.kind == "previous_menu" else "exit"
+                        snapshot, result = control_live_menu(client, snapshot, operation)
+                        remember_catalogue(known_items, snapshot.items)
+                        if result is not None and result.accepted:
+                            visible_menu_path = visible_path_after_menu_control(
+                                visible_menu_path,
+                                operation,
+                            )
+                            detail = (
+                                "DCS opened the previous menu."
+                                if operation == "previous"
+                                else "DCS closed the radio menu."
+                            )
+                            print(detail)
+                            write_event(
+                                "menu_control",
+                                transcript=transcript,
+                                operation=operation,
+                                accepted=True,
+                                revision=snapshot.revision,
+                            )
+                        else:
+                            reason = result.code if result is not None else "timeout"
+                            detail = (
+                                f"DCS rejected the menu control: {reason}."
+                                if result is not None
+                                else "DCS did not acknowledge the menu control."
+                            )
+                            print(detail)
+                            write_event(
+                                "menu_control",
+                                transcript=transcript,
+                                operation=operation,
+                                accepted=False,
+                                reason=reason,
+                                revision=snapshot.revision,
+                            )
+                        continue
+
                     if meta.kind == "show":
                         navigation, snapshot, result = open_live_menu(
                             client,
                             snapshot,
                             meta.node,
+                            current_path=visible_menu_path,
                         )
+                        if (
+                            navigation.status == "not_found"
+                            and visible_menu_path is not None
+                            and meta.node is not None
+                        ):
+                            navigation, snapshot, result = open_live_menu(
+                                client,
+                                snapshot,
+                                meta.node,
+                            )
                         remember_catalogue(known_items, snapshot.items)
                         if result is not None and result.accepted:
                             visible_menu_path = navigation.path
@@ -603,7 +683,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("\nCancelled.")
         return 130
     except OSError as exc:
-        print(f"Voice-command test failed: {exc}", file=sys.stderr)
+        print(f"CombatAI voice control failed: {exc}", file=sys.stderr)
         return 2
 
 
