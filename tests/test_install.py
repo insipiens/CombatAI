@@ -80,10 +80,37 @@ class InstallTests(unittest.TestCase):
         uninstall_hook(self.dcs, self.saved)
         self.assertEqual(self.core.read_bytes(), vaicom_core)
 
-    def test_second_install_is_rejected(self) -> None:
+    def test_second_install_is_an_idempotent_update(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)
-        with self.assertRaisesRegex(InstallError, "active installation manifest"):
+        result = install_hook(self.dcs, self.saved, self.hook)
+        self.assertEqual(result["outcome"], "already_current")
+
+    def test_installed_hook_can_be_updated_without_replacing_original_backup(self) -> None:
+        first = install_hook(self.dcs, self.saved, self.hook)
+        backup = Path(first["backup"])
+        original_backup = backup.read_bytes()
+        updated_hook = HOOK + b"-- revised hook\n"
+        self.hook.write_bytes(updated_hook)
+
+        result = install_hook(self.dcs, self.saved, self.hook)
+
+        self.assertEqual(result["outcome"], "updated_active_dcs_panel")
+        self.assertEqual(Path(result["backup"]), backup)
+        self.assertEqual(backup.read_bytes(), original_backup)
+        self.assertIn(updated_hook, self.core.read_bytes())
+        self.assertTrue(installation_status(self.dcs, self.saved)["healthy"])
+        uninstall_hook(self.dcs, self.saved)
+        self.assertEqual(self.core.read_bytes(), self.original_core)
+
+    def test_update_refuses_an_installed_panel_changed_elsewhere(self) -> None:
+        install_hook(self.dcs, self.saved, self.hook)
+        self.core.write_bytes(self.core.read_bytes() + b"-- changed elsewhere\n")
+        self.hook.write_bytes(HOOK + b"-- revised hook\n")
+
+        with self.assertRaisesRegex(InstallError, "has changed"):
             install_hook(self.dcs, self.saved, self.hook)
+
+        self.assertIn(b"changed elsewhere", self.core.read_bytes())
 
     def test_changed_target_is_not_overwritten_on_uninstall(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)

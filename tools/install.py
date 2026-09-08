@@ -62,7 +62,13 @@ def install_hook(dcs_install: Path, saved_games: Path, hook: Path) -> dict[str, 
         if _is_legacy_saved_games_install(existing, saved_games):
             migrated = _remove_legacy_saved_games_install(saved_games, existing)
         else:
-            raise InstallError(f"CombatAI already has an active installation manifest: {manifest_path}")
+            return _update_active_installation(
+                core_panel,
+                state_directory,
+                manifest_path,
+                hook,
+                existing,
+            )
 
     if BEGIN_MARKER in core_panel.read_bytes():
         raise InstallError(
@@ -105,6 +111,65 @@ def install_hook(dcs_install: Path, saved_games: Path, hook: Path) -> dict[str, 
         if installed:
             _copy_atomic(backup_path, core_panel)
         raise
+
+
+def _update_active_installation(
+    core_panel: Path,
+    state_directory: Path,
+    manifest_path: Path,
+    hook: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Replace only a verified CombatAI overlay while preserving its original backup."""
+
+    target = Path(manifest["target"])
+    backup = Path(manifest["backup"])
+    if manifest.get("schema") != 2 or manifest.get("base_kind") != "active_dcs_panel":
+        raise InstallError("The active CombatAI manifest cannot be updated safely")
+    if target.resolve() != core_panel.resolve():
+        raise InstallError("Manifest target does not belong to the selected DCS installation")
+    _validate_backup_location(backup, state_directory)
+    if not target.is_file() or file_hash(target) != manifest["installed_sha256"]:
+        raise InstallError(
+            "The installed radio-panel file has changed since CombatAI was installed; "
+            "refusing to overwrite changes made by DCS, VAICOM, or another mod"
+        )
+    if not backup.is_file() or file_hash(backup) != manifest["base_sha256"]:
+        raise InstallError(f"The recorded backup is missing or altered: {backup}")
+
+    staged_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.combatai-new")
+    previous_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.combatai-old")
+    replaced = False
+    try:
+        base_sha256 = build_overlay(backup, hook, staged_path)
+        if base_sha256 != manifest["base_sha256"]:
+            raise InstallError("The verified installation backup no longer matches its manifest")
+        installed_sha256 = file_hash(staged_path)
+        if installed_sha256 == manifest["installed_sha256"]:
+            result = dict(manifest)
+            result["outcome"] = "already_current"
+            return result
+
+        shutil.copy2(core_panel, previous_path)
+        os.replace(staged_path, core_panel)
+        replaced = True
+        updated = dict(manifest)
+        updated["installed_sha256"] = installed_sha256
+        updated["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _write_json_atomic(manifest_path, updated)
+        result = dict(updated)
+        result["outcome"] = "updated_active_dcs_panel"
+        return result
+    except BaseException:
+        if replaced and previous_path.is_file():
+            _copy_atomic(previous_path, core_panel)
+        raise
+    finally:
+        for temporary in (staged_path, previous_path):
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def uninstall_hook(dcs_install: Path, saved_games: Path) -> dict[str, Any]:

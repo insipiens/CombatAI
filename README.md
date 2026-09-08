@@ -76,6 +76,11 @@ finds standard standalone and Steam locations, backs up the exact active radio-p
 under `Saved Games\DCS\Scripts\CombatAI\backups`, appends the CombatAI hook atomically,
 and records hashes in `Scripts\CombatAI\install.json`.
 
+After replacing the CombatAI source files with a newer patch, run `install.bat` again. If the
+installed panel and its original backup still match the recorded hashes, the installer updates
+only the CombatAI overlay in place and preserves the original backup for uninstall. It refuses
+the update if DCS, VAICOM, or another modification changed the installed panel meanwhile.
+
 If discovery finds no installation or more than one, provide both paths:
 
 ```powershell
@@ -84,8 +89,8 @@ If discovery finds no installation or more than one, provide both paths:
   --saved-games "$env:USERPROFILE\Saved Games\DCS"
 ```
 
-CombatAI refuses an ambiguous installation, an unrecognised existing modification, or a
-second active installation. Check the installed state with:
+CombatAI refuses an ambiguous installation or an unrecognised existing modification. Check
+the installed state with:
 
 ```powershell
 .\runtime\python.exe tools\install.py status
