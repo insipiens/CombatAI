@@ -38,6 +38,9 @@ script subsequently produced its intended gameplay effect.
 
 ## Requirements
 
+For a beginner-friendly walkthrough from download through the first in-game test, see the
+[installation guide](INSTALLATION.md).
+
 - Windows 11 x64;
 - DCS World;
 - a local clone or extracted download of this repository.
