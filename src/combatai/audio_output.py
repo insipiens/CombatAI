@@ -13,7 +13,7 @@ class AudioOutput:
         self.buffer_size = buffer_size
         self._lock = threading.Lock()
         self._channel: object | None = None
-        self._format: tuple[int, int] | None = None
+        self._format: tuple[int, int, int] | None = None
 
     @staticmethod
     def devices() -> list[str]:
@@ -31,8 +31,8 @@ class AudioOutput:
         import pygame
 
         with self._lock:
-            wanted = (sample_rate, 1)
-            if self._format != wanted or not pygame.mixer.get_init():
+            wanted = (sample_rate, -16, 1)
+            if self._format != wanted or pygame.mixer.get_init() != wanted:
                 pygame.mixer.quit()
                 pygame.mixer.init(
                     frequency=sample_rate,
@@ -40,7 +40,14 @@ class AudioOutput:
                     channels=1,
                     buffer=self.buffer_size,
                     devicename=self.device_name,
+                    allowedchanges=0,
                 )
+                actual = pygame.mixer.get_init()
+                if actual != wanted:
+                    pygame.mixer.quit()
+                    raise OSError(
+                        f"SDL changed the requested PCM format from {wanted} to {actual}"
+                    )
                 self._format = wanted
             sound = pygame.mixer.Sound(buffer=pcm)
             sound.set_volume(volume)

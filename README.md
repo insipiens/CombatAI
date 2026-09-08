@@ -27,7 +27,7 @@ CombatAI currently provides:
 - local `base.en`, `small.en`, and `medium.en` model choices;
 - catalogue-derived Whisper vocabulary prompting;
 - deterministic scoring with a configurable floor and runner-up lead;
-- Piper's Alan voice as raw PCM, played from memory through SDL;
+- Piper's Alan voice as raw PCM, played from memory through SDL at the model's native rate;
 - selectable audio output, interruptible speech, and a restrained configurable speech pace;
 - concise accepted/rejected cues through the same output device;
 - rotating text and JSONL development logs.
