@@ -12,6 +12,13 @@ from .protocol import MenuItem
 _REPEAT = {"repeat", "repeat please", "say again", "say again please"}
 _F10_ROOT_LABELS = {"f10", "f10other", "other"}
 _F10_REQUESTS = {"f10", "f10other", "otherf10", "other"}
+_KNOWN_ROOTS = {
+    "wingman": "Wingman",
+    "flight": "Flight",
+    "secondelement": "Second Element",
+    "atc": "ATC",
+    "groundcrew": "Ground Crew",
+}
 _TOP_LEVEL_REQUESTS = {"", "all", "categories", "category", "toplevel"}
 _COMMAND_WORDS = {"command", "commands", "cabans"}
 _MINIMUM_NODE_SCORE = 0.72
@@ -113,6 +120,9 @@ def _resolve_node(
         choices = tuple(_display_path(path) for path in label_matches)
         return "ambiguous", None, choices
 
+    if wanted in _KNOWN_ROOTS:
+        return "unavailable", (_KNOWN_ROOTS[wanted],), ()
+
     ranked: list[tuple[float, tuple[str, ...]]] = []
     normalised_wanted = _normalise(requested_node)
     for path in nodes:
@@ -153,7 +163,8 @@ def list_node_children(
     if status == "found" and path is not None:
         return NodeListing("found", _display_path(path), nodes[path])
     if status == "unavailable":
-        return NodeListing("unavailable", "F10")
+        display = path[0] if path is not None else "F10"
+        return NodeListing("unavailable", display)
     return NodeListing(status, requested_node, choices=choices)
 
 

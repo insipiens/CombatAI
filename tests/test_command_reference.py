@@ -105,6 +105,15 @@ class CommandReferenceTests(unittest.TestCase):
         self.assertEqual(listing.status, "unavailable")
         self.assertEqual(spoken_listing(listing), "No F10 commands are currently available.")
 
+    def test_known_radio_root_can_be_temporarily_empty(self) -> None:
+        no_ground_crew = tuple(item for item in ITEMS if item.path[0] != "Ground Crew")
+        listing = list_node_children(no_ground_crew, "Ground Crew")
+        self.assertEqual(listing.status, "unavailable")
+        self.assertEqual(
+            spoken_listing(listing),
+            "No Ground Crew commands are currently available.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

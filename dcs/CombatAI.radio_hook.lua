@@ -171,7 +171,7 @@ do
         if data and data.initialized and data.rootItem then
             local root = cai_submenu(data.rootItem)
             if root and cai_base.type(root.items) == "table" then
-                local included_slots = {1, 2, 3, 5, 10}
+                local included_slots = {1, 2, 3, 5, 8, 10}
                 for _, slot in cai_base.ipairs(included_slots) do
                     local item = root.items[slot]
                     if cai_base.type(item) == "table" and cai_condition_allows(item) then

@@ -9,14 +9,18 @@ from combatai.matcher import (
     MatchResult,
     RankedMatch,
     build_vocabulary_prompt,
+    critical_terms_compatible,
     match_catalogue,
     normalize_phrase,
+    strong_semantic_match,
 )
 from combatai.protocol import MenuItem
 from combatai.voice_command_test import (
     MINIMUM_EXECUTION_SCORE,
     MINIMUM_EXECUTION_LEAD,
     execution_candidate,
+    remember_catalogue,
+    unavailable_candidate,
     wait_for_catalogue,
 )
 
@@ -42,6 +46,7 @@ ITEMS = (
         ("ATC", "Kenley", "Request Start-Up"),
     ),
     MenuItem("f10.10.1", "Contact Air Sea Rescue", ("Other", "Contact Air Sea Rescue")),
+    MenuItem("f10.10.2", "Stop Broadcast", ("Other", "Stop Broadcast")),
 )
 
 
@@ -69,6 +74,12 @@ class MatcherTests(unittest.TestCase):
         result = match_catalogue("Biggin Hill request startup", ITEMS)
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "radio.5.1.1")  # type: ignore[union-attr]
+
+    def test_exact_full_path_bypasses_generic_lead_gate(self) -> None:
+        result = match_catalogue("ATC Biggin Hill request startup", ITEMS)
+        self.assertEqual(result.best.item.action_id, "radio.5.1.1")  # type: ignore[union-attr]
+        self.assertTrue(result.best.exact)  # type: ignore[union-attr]
+        self.assertIsNotNone(execution_candidate(result))
 
     def test_f10_leaf_matches_without_saying_other(self) -> None:
         result = match_catalogue("Contact air-sea rescue", ITEMS)
@@ -109,6 +120,49 @@ class MatcherTests(unittest.TestCase):
     def test_unrelated_speech_does_not_match(self) -> None:
         result = match_catalogue("What is the weather tomorrow", ITEMS)
         self.assertEqual(result.status, "no_match")
+
+    def test_opposite_state_word_cannot_match(self) -> None:
+        stop = next(item for item in ITEMS if item.action_id == "f10.10.2")
+        result = match_catalogue("Start radio broadcast", (stop,))
+        self.assertEqual(result.status, "no_match")
+        self.assertEqual(result.ranked[0].score, 0.0)
+
+    def test_stateful_action_requires_its_qualifier(self) -> None:
+        stop = next(item for item in ITEMS if item.action_id == "f10.10.2")
+        result = match_catalogue("Broadcast", (stop,))
+        self.assertEqual(result.status, "no_match")
+        self.assertEqual(result.ranked[0].score, 0.0)
+
+    def test_critical_direction_terms_must_agree(self) -> None:
+        self.assertFalse(critical_terms_compatible("break left", "break right"))
+        self.assertTrue(critical_terms_compatible("break left", "wingman break left"))
+
+    def test_stale_revalidation_accepts_same_semantic_action(self) -> None:
+        stop = next(item for item in ITEMS if item.action_id == "f10.10.2")
+        self.assertTrue(strong_semantic_match("Stop radio broadcast", stop))
+        self.assertFalse(strong_semantic_match("Start radio broadcast", stop))
+
+    def test_last_seen_command_can_be_reported_as_unavailable(self) -> None:
+        broadcast = MenuItem(
+            "f10.10.3",
+            "Radio Broadcast",
+            ("Other", "Radio Broadcast"),
+        )
+        known = {}
+        remember_catalogue(known, (broadcast,))
+        candidate = unavailable_candidate("Radio Broadcast", (), known)
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate.item, broadcast)  # type: ignore[union-attr]
+
+    def test_live_command_is_not_reported_as_unavailable(self) -> None:
+        broadcast = MenuItem(
+            "f10.10.3",
+            "Radio Broadcast",
+            ("Other", "Radio Broadcast"),
+        )
+        known = {}
+        remember_catalogue(known, (broadcast,))
+        self.assertIsNone(unavailable_candidate("Radio Broadcast", (broadcast,), known))
 
     def test_matching_test_contains_no_execution_call(self) -> None:
         source = (

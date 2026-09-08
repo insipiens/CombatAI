@@ -15,9 +15,16 @@ from .configuration_store import load_document
 from .dcs_client import DcsMenuClient
 from .event_log import write_event
 from .hotas import HotasButton, SdlHotasInput, resolve_binding
-from .matcher import MatchResult, RankedMatch, build_vocabulary_prompt, match_catalogue
+from .matcher import (
+    MatchResult,
+    RankedMatch,
+    build_vocabulary_prompt,
+    match_catalogue,
+    strong_semantic_match,
+)
 from .matching_test import _print_result
 from .microphone import WinMmAudioInput, _pcm16_level, load_selection, resolve_selection
+from .protocol import MenuItem
 from .recording_test import (
     SAMPLE_RATE,
     SpaceOrHotasPushToTalk,
@@ -45,12 +52,42 @@ def execution_candidate(
         return None
     if result.best.score < minimum_score:
         return None
+    if result.best.exact:
+        return result.best
     ranked = result.ranked or result.candidates
     if len(ranked) > 1 and result.best.score - ranked[1].score < minimum_lead:
         return None
     if not result.best.item.executable:
         return None
     return result.best
+
+
+def remember_catalogue(
+    known_items: dict[tuple[str, ...], MenuItem], items: tuple[MenuItem, ...]
+) -> None:
+    for item in items:
+        known_items[item.path] = item
+
+
+def unavailable_candidate(
+    transcript: str,
+    live_items: tuple[MenuItem, ...],
+    known_items: dict[tuple[str, ...], MenuItem],
+    *,
+    minimum_score: float = MINIMUM_EXECUTION_SCORE,
+    minimum_lead: float = MINIMUM_EXECUTION_LEAD,
+) -> RankedMatch | None:
+    live_paths = {item.path for item in live_items}
+    historical = tuple(known_items.values())
+    result = match_catalogue(transcript, historical)
+    candidate = execution_candidate(
+        result,
+        minimum_score=minimum_score,
+        minimum_lead=minimum_lead,
+    )
+    if candidate is None or candidate.item.path in live_paths:
+        return None
+    return candidate
 
 
 def wait_for_catalogue(client: DcsMenuClient) -> None:
@@ -122,9 +159,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         with DcsMenuClient() as client:
             wait_for_catalogue(client)
+            known_items: dict[tuple[str, ...], MenuItem] = {}
             while True:
                 snapshot = client.snapshot
                 assert snapshot is not None
+                remember_catalogue(known_items, snapshot.items)
                 print(f"\nCatalogue revision {snapshot.revision}: {len(snapshot.items)} commands")
                 print(f"Hold {ptt.label} and speak. Release it to execute a safe match.")
                 print("Press ESC while waiting to stop.\n")
@@ -173,6 +212,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"\nHeard: {transcript}")
                 print(f"Transcription time: {elapsed:.2f} seconds")
 
+                # The menu can change while the pilot is speaking.  Refresh
+                # immediately before interpretation instead of matching a
+                # state captured before PTT was pressed.
+                latest = client.request_menu_and_wait(timeout=0.5)
+                if latest is not None:
+                    snapshot = latest
+                    remember_catalogue(known_items, snapshot.items)
+
                 meta = parse_meta_command(transcript)
                 if meta is not None:
                     if meta.kind == "repeat":
@@ -219,7 +266,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     continue
 
                 match = match_catalogue(transcript, snapshot.items)
-                _print_result(match)
                 candidate = execution_candidate(
                     match,
                     minimum_score=minimum_score,
@@ -234,6 +280,32 @@ def main(argv: Sequence[str] | None = None) -> int:
                     for ranked_match in match.ranked[:5]
                 ]
                 if candidate is None:
+                    unavailable = unavailable_candidate(
+                        transcript,
+                        snapshot.items,
+                        known_items,
+                        minimum_score=minimum_score,
+                        minimum_lead=minimum_lead,
+                    )
+                    if unavailable is not None:
+                        response = f"{unavailable.item.label} is not currently available."
+                        print(f"CombatAI: {response}")
+                        speech.speak(response)
+                        write_event(
+                            "command_rejected",
+                            reason="not_currently_available",
+                            transcript=transcript,
+                            intended_action=" > ".join(unavailable.item.path),
+                            revision=snapshot.revision,
+                            candidates=ranked,
+                            duration_seconds=round(duration, 3),
+                            average_dbfs=round(dbfs, 2) if dbfs is not None else None,
+                            transcription_seconds=round(elapsed, 3),
+                            stt=stt_metrics,
+                        )
+                        continue
+
+                    _print_result(match)
                     if match.status == "matched" and match.best is not None:
                         if match.best.score < minimum_score:
                             reason = "below_minimum_score"
@@ -277,6 +349,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         play_cue("rejected", volume=cue_volume, output=speech.output)
                     continue
 
+                _print_result(match)
                 write_event(
                     "command_sent",
                     transcript=transcript,
@@ -299,6 +372,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     refreshed = client.request_menu_and_wait(timeout=2.0)
                     retry_candidate = None
                     if refreshed is not None:
+                        remember_catalogue(known_items, refreshed.items)
                         retry_match = match_catalogue(transcript, refreshed.items)
                         possible_retry = execution_candidate(
                             retry_match,
@@ -307,7 +381,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                         )
                         if (
                             possible_retry is not None
-                            and possible_retry.item.path == candidate.item.path
+                            and (
+                                possible_retry.item.path == candidate.item.path
+                                or strong_semantic_match(transcript, possible_retry.item)
+                            )
                         ):
                             retry_candidate = possible_retry
 
@@ -359,6 +436,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if cues_enabled:
                     play_cue("accepted", volume=cue_volume, output=speech.output)
                 wait_for_catalogue(client)
+                if client.snapshot is not None:
+                    remember_catalogue(known_items, client.snapshot.items)
     except KeyboardInterrupt:
         print("\nCancelled.")
         return 130

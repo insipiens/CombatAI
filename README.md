@@ -139,6 +139,11 @@ only when it clears both configured matching gates. PTT stops active SDL playbac
 Piper if synthesis is still running, discards that response, and starts microphone capture.
 Alan uses the Piper voice model's native synthesis settings.
 
+CombatAI matches the live Wingman, Flight, Second Element, ATC, Ground Crew, and mission/F10
+branches. A unique exact path is not rejected merely because another location offers the same
+leaf command. Operational qualifiers such as start/stop and left/right must agree, and a command
+remembered from an earlier menu revision is described as unavailable rather than executed.
+
 Useful local spoken commands include:
 
 ```text

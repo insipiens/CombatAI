@@ -17,7 +17,7 @@ class RadioHookTests(unittest.TestCase):
         self.assertIn("cai_submenu(data.rootItem)", self.source)
         self.assertRegex(
             self.source,
-            r"local included_slots = \{1, 2, 3, 5, 10\}",
+            r"local included_slots = \{1, 2, 3, 5, 8, 10\}",
         )
 
     def test_sparse_menu_slots_are_sorted_before_traversal(self) -> None:
