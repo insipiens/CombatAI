@@ -31,7 +31,7 @@ Launch DCS at least once before installing CombatAI. This creates the DCS folder
 3. Right-click the ZIP and select **Extract All**.
 4. Choose a permanent, easy-to-find location, such as `C:\CombatAI`.
 5. Open the extracted folder and check that it contains `install.bat`, `configuration.bat`,
-   and `voice-command-test.bat`.
+   and `run.bat`.
 
 Do not run CombatAI from inside the ZIP preview. Do not put it in `Program Files`. Keep the
 extracted folder after installation: it contains the program and is also needed for safe
@@ -172,12 +172,12 @@ You can now close the browser tab and press Ctrl+C in the configuration PowerShe
 Configuration is stored at `%LOCALAPPDATA%\CombatAI\config.json` and is kept when you update
 the source files.
 
-## 6. Run the first in-game test
+## 6. Run CombatAI in DCS
 
 1. In PowerShell, from the CombatAI folder, run:
 
    ```powershell
-   .\voice-command-test.bat
+   .\run.bat
    ```
 
 2. Leave that PowerShell window open.
@@ -185,7 +185,8 @@ the source files.
    live DCS command catalogue.
 4. Hold your configured HOTAS button, or Space, speak a command, and then release the button.
 
-Start with commands that are easy to observe and do not trigger an aircraft action:
+For the first flight, start with commands that are easy to observe and do not trigger an
+aircraft action:
 
 ```text
 List commands
@@ -215,7 +216,7 @@ To stop CombatAI, return to its PowerShell window and press Ctrl+C.
 
 For each session:
 
-1. Run `.\voice-command-test.bat` from the CombatAI folder.
+1. Run `.\run.bat` from the CombatAI folder.
 2. Start DCS and enter the mission.
 3. Leave the CombatAI window open while flying.
 4. Press Ctrl+C in that window when finished.

@@ -140,7 +140,7 @@ Captured audio is neither logged nor retained.
 Start CombatAI before entering a DCS mission:
 
 ```powershell
-.\voice-command-test.bat
+.\run.bat
 ```
 
 Hold Space or the configured HOTAS button, speak, and release. A command is sent immediately
@@ -170,20 +170,20 @@ saying a displayed submenu name navigates deeper; saying a displayed leaf comman
 normally. For example: `Show ATC`, `Biggin Hill`, `Request Start-Up`. List, show, submenu
 navigation, and repeat cannot fall through to executable action matching.
 
-## Diagnostics
+## Developer diagnostics
 
-The individual diagnostics remain available:
+These test utilities are not part of normal installation or everyday use:
 
 ```powershell
 .\microphone.bat
 .\recording-test.bat
 .\transcription-test.bat
 .\matching-test.bat
-.\run.bat
+.\radio-menu-test.bat
 ```
 
 Only one Windows process can own CombatAI's UDP listener. Close `run.bat` before starting a
-matching or live voice-command test.
+radio-menu or matching diagnostic.
 
 If no catalogue arrives, confirm that a mission is active, check installer status, verify
 that DCS owns UDP port `34383` and CombatAI owns `34384`, then inspect

@@ -28,6 +28,7 @@ class BootstrapTests(unittest.TestCase):
             "configuration.bat",
             "microphone.bat",
             "recording-test.bat",
+            "radio-menu-test.bat",
             "run.bat",
             "transcription-test.bat",
             "uninstall.bat",
@@ -35,6 +36,13 @@ class BootstrapTests(unittest.TestCase):
             content = (ROOT / filename).read_text(encoding="utf-8")
             self.assertIn("runtime\\python.exe", content, filename)
             self.assertNotIn("py -", content.lower(), filename)
+
+    def test_user_runner_launches_voice_control(self) -> None:
+        runner = (ROOT / "run.bat").read_text(encoding="utf-8")
+        diagnostic = (ROOT / "radio-menu-test.bat").read_text(encoding="utf-8")
+        self.assertIn("-m combatai.voice_command_test", runner)
+        self.assertIn("-m combatai", diagnostic)
+        self.assertNotIn("voice_command_test", diagnostic)
 
     def test_sdl_controller_runtime_is_pinned_and_hash_verified(self) -> None:
         setup = (ROOT / "setup.ps1").read_text(encoding="utf-8")

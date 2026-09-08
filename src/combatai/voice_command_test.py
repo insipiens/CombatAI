@@ -1,4 +1,4 @@
-"""Capture, match, and execute one tightly gated live DCS voice command."""
+"""Run CombatAI's live DCS voice-control application."""
 
 from __future__ import annotations
 
@@ -158,7 +158,7 @@ def wait_for_catalogue(client: DcsMenuClient) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Execute one unambiguous spoken command from the live DCS catalogue"
+        description="Run voice control against the live DCS command catalogue"
     )
     parser.add_argument("--maximum-seconds", type=float, default=30.0)
     args = parser.parse_args(argv)
@@ -194,7 +194,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             base_ptt = SpacePushToTalk(keys)
         ptt = InterruptingPushToTalk(base_ptt, speech)
 
-        print("CombatAI live voice-command test")
+        print("CombatAI voice control")
         print(f"Microphone: {microphone.name}")
         print(f"Push to talk: {ptt.label}")
         print(f"Execution gate: {minimum_score:.0%} match, {minimum_lead:.0%} lead")
