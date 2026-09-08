@@ -12,13 +12,13 @@ response text -> piper.exe --output-raw -> PCM memory -> pygame-ce/SDL -> select
 
 Piper runs once per response so an utterance has an unambiguous end. Synthesis runs on a
 background thread. Pressing PTT terminates an active Piper process, stops SDL playback, and
-discards the interrupted PCM before microphone capture starts. SDL's logical mixer format is
-locked to the voice model's sample rate; SDL converts to the output hardware without
-reinterpreting the PCM at a higher rate and changing Alan's pitch.
+discards the interrupted PCM before microphone capture starts.
 
-The configuration page exposes the output device, a voice test, and Piper's
-`--length_scale`. The default is `0.95`; lower values speak faster. Configuration schema 4 migrates the earlier `0.80` default once because it made Alan sound unnaturally accelerated. Sentence silence is
-`0.04` seconds for concise cockpit responses.
+CombatAI does not override Piper's length scale, sentence silence, or other voice controls;
+Alan uses the model's native synthesis settings. SDL's logical mixer format is locked to the
+model's sample rate, and SDL converts to the output hardware without reinterpreting the PCM
+at a higher rate.
 
-The model and configuration files remain under `models\piper`; the executable remains
-under `tools\piper`. No Python package, cloud request, or temporary WAV is involved.
+The configuration page exposes the output device and a voice test. The model and
+configuration files remain under `models\piper`; the executable remains under
+`tools\piper`. No Python package, cloud request, or temporary WAV is involved.

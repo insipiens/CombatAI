@@ -21,8 +21,6 @@ class PiperSpeech:
         model: Path | None = None,
         *,
         output_device: str | None = None,
-        length_scale: float = 0.95,
-        sentence_silence: float = 0.04,
         output: AudioOutput | None = None,
     ) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -33,8 +31,6 @@ class PiperSpeech:
             os.environ.get("COMBATAI_PIPER_MODEL", root / "models" / "piper" / "en_GB-alan-medium.onnx")
         )
         self.output = output or AudioOutput(output_device)
-        self.length_scale = float(length_scale)
-        self.sentence_silence = float(sentence_silence)
         self._last_text: str | None = None
         self._lock = threading.Lock()
         self._process: subprocess.Popen[bytes] | None = None
@@ -49,8 +45,6 @@ class PiperSpeech:
             raise OSError(f"Piper voice model not found: {self.model}. Run setup-tts.bat.")
         if not Path(str(self.model) + ".json").is_file():
             raise OSError("Piper voice configuration is missing. Run setup-tts.bat.")
-        if not 0.60 <= self.length_scale <= 1.20:
-            raise ValueError("Piper length scale must be between 0.60 and 1.20")
 
     @property
     def last_text(self) -> str | None:
@@ -79,8 +73,6 @@ class PiperSpeech:
                 str(self.executable),
                 "--model", str(self.model),
                 "--output-raw",
-                "--length_scale", str(self.length_scale),
-                "--sentence_silence", str(self.sentence_silence),
                 "--quiet",
             ],
             stdin=subprocess.PIPE,

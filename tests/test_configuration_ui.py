@@ -18,7 +18,6 @@ class ConfigurationUiTests(unittest.TestCase):
             "Installed Whisper model",
             "Use GPU acceleration",
             "Playback device",
-            "Speech pace",
             "Test Alan voice",
             "Recent activity",
             "Audio feedback",

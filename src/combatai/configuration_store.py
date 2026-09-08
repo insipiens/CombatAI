@@ -8,13 +8,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-SCHEMA = 4
+SCHEMA = 5
 DEFAULT_MINIMUM_SCORE = 0.70
 DEFAULT_MINIMUM_LEAD = 0.10
 MINIMUM_SCORE_RANGE = (0.60, 0.95)
 MINIMUM_LEAD_RANGE = (0.02, 0.30)
 CUE_VOLUME_RANGE = (0.05, 1.00)
-DEFAULT_SPEECH_LENGTH_SCALE = 0.95
 
 
 def config_path() -> Path:
@@ -32,10 +31,7 @@ def default_document() -> dict[str, Any]:
             "minimum_lead": DEFAULT_MINIMUM_LEAD,
         },
         "stt": {"model": "ggml-base.en.bin", "use_gpu": False},
-        "audio": {
-            "output_device": None,
-            "speech_length_scale": DEFAULT_SPEECH_LENGTH_SCALE,
-        },
+        "audio": {"output_device": None},
         "ptt": {"mode": "keyboard"},
         "feedback": {"audio_cues": True, "cue_volume": 0.25},
     }
@@ -59,8 +55,6 @@ def load_document(path: Path | None = None) -> dict[str, Any]:
     document["ptt"] = _validated_ptt(raw.get("ptt"))
     document["feedback"] = _validated_feedback(raw.get("feedback"))
     document["audio"] = _validated_audio(raw.get("audio"))
-    if raw.get("schema") == 3 and document["audio"]["speech_length_scale"] == 0.80:
-        document["audio"]["speech_length_scale"] = DEFAULT_SPEECH_LENGTH_SCALE
     return document
 
 
@@ -100,7 +94,6 @@ def update_settings(
     model: str,
     use_gpu: bool,
     output_device: str | None,
-    speech_length_scale: float,
     microphone: Mapping[str, Any] | None,
     audio_cues: bool,
     cue_volume: float,
@@ -111,10 +104,7 @@ def update_settings(
         "minimum_lead": minimum_lead,
     }
     updated["stt"] = {"model": model, "use_gpu": use_gpu}
-    updated["audio"] = {
-        "output_device": output_device,
-        "speech_length_scale": speech_length_scale,
-    }
+    updated["audio"] = {"output_device": output_device}
     updated["feedback"] = {"audio_cues": audio_cues, "cue_volume": cue_volume}
     if microphone is not None:
         updated["microphone"] = dict(microphone)
@@ -154,13 +144,7 @@ def _validated_audio(value: object) -> dict[str, Any]:
     output_device = source.get("output_device")
     if output_device is not None and (not isinstance(output_device, str) or not output_device):
         raise ValueError("audio.output_device must be a device name or null")
-    speech_length_scale = _bounded_float(
-        source.get("speech_length_scale", DEFAULT_SPEECH_LENGTH_SCALE), "speech_length_scale", 0.60, 1.20
-    )
-    return {
-        "output_device": output_device,
-        "speech_length_scale": speech_length_scale,
-    }
+    return {"output_device": output_device}
 
 
 def _validated_ptt(value: object) -> dict[str, Any]:

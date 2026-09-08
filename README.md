@@ -28,7 +28,7 @@ CombatAI currently provides:
 - catalogue-derived Whisper vocabulary prompting;
 - deterministic scoring with a configurable floor and runner-up lead;
 - Piper's Alan voice as raw PCM, played from memory through SDL at the model's native rate;
-- selectable audio output, interruptible speech, and a restrained configurable speech pace;
+- selectable audio output and interruptible speech using Piper's native voice settings;
 - concise accepted/rejected cues through the same output device;
 - rotating text and JSONL development logs.
 
@@ -117,7 +117,7 @@ Open the local configuration page:
 ```
 
 The page is served only on `127.0.0.1:34385`. It configures and tests the microphone,
-microphone input and speech/cue output together, plus Alan speech pace, the installed Whisper model, matching
+microphone input and speech/cue output together, plus the installed Whisper model, matching
 thresholds, and HOTAS PTT binding. GPU recognition becomes available only after the pinned CUDA 12 worker is installed. It is
 experimental so its latency and DCS resource impact can be measured on the target machine;
 CPU remains the default.
@@ -137,7 +137,7 @@ Start CombatAI before entering a DCS mission:
 Hold Space or the configured HOTAS button, speak, and release. A command is sent immediately
 only when it clears both configured matching gates. PTT stops active SDL playback, terminates
 Piper if synthesis is still running, discards that response, and starts microphone capture.
-Alan defaults to a restrained `0.95` length scale; the earlier `0.80` setting is migrated once.
+Alan uses the Piper voice model's native synthesis settings.
 
 Useful local spoken commands include:
 

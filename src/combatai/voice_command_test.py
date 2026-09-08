@@ -91,10 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             use_gpu=bool(stt_settings["use_gpu"]),
         )
         recognizer.start()
-        speech = PiperSpeech(
-            output_device=output_settings["output_device"],
-            length_scale=float(output_settings["speech_length_scale"]),
-        )
+        speech = PiperSpeech(output_device=output_settings["output_device"])
         speech.validate()
         if ptt_settings["mode"] == "hotas":
             hotas_source = SdlHotasInput()
@@ -121,7 +118,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             cue_volume=cue_volume,
             piper_model=str(speech.model),
             output_device=output_settings["output_device"],
-            speech_length_scale=speech.length_scale,
             whisper_compute="gpu" if recognizer.use_gpu else "cpu",
         )
         with DcsMenuClient() as client:

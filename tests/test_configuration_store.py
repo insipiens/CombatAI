@@ -22,20 +22,14 @@ class ConfigurationStoreTests(unittest.TestCase):
                 encoding="utf-8",
             )
             document = load_document(path)
-        self.assertEqual(document["schema"], 4)
+        self.assertEqual(document["schema"], 5)
         self.assertEqual(document["microphone"]["name"], "VR")
         self.assertEqual(document["matching"]["minimum_score"], DEFAULT_MINIMUM_SCORE)
         self.assertEqual(document["matching"]["minimum_lead"], DEFAULT_MINIMUM_LEAD)
         self.assertEqual(document["ptt"], {"mode": "keyboard"})
         self.assertEqual(document["feedback"], {"audio_cues": True, "cue_volume": 0.25})
         self.assertEqual(document["stt"]["use_gpu"], False)
-        self.assertEqual(document["audio"]["speech_length_scale"], 0.95)
-
-    def test_schema_three_urgent_default_is_migrated(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "config.json"
-            path.write_text(json.dumps({"schema": 3, "audio": {"output_device": None, "speech_length_scale": 0.80}}), encoding="utf-8")
-            self.assertEqual(load_document(path)["audio"]["speech_length_scale"], 0.95)
+        self.assertEqual(document["audio"], {"output_device": None})
 
     def test_audio_and_hotas_settings_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -48,24 +42,17 @@ class ConfigurationStoreTests(unittest.TestCase):
                 "guid": "0300abcd",
                 "button": 47,
             }
-            document["audio"] = {
-                "output_device": "VR headset",
-                "speech_length_scale": 0.76,
-            }
+            document["audio"] = {"output_device": "VR headset"}
             save_document(document, path)
             saved = load_document(path)
             self.assertEqual(saved["ptt"]["button"], 47)
             self.assertEqual(saved["audio"]["output_device"], "VR headset")
 
-    def test_match_and_speech_settings_are_bounded(self) -> None:
+    def test_match_settings_are_bounded(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             document = load_document(path)
             document["matching"]["minimum_score"] = 0.20
-            with self.assertRaisesRegex(ValueError, "between"):
-                save_document(document, path)
-            document = load_document(path)
-            document["audio"]["speech_length_scale"] = 0.20
             with self.assertRaisesRegex(ValueError, "between"):
                 save_document(document, path)
 
