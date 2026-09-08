@@ -91,14 +91,22 @@ second active installation. Check the installed state with:
 .\runtime\python.exe tools\install.py status
 ```
 
-To restore the exact file backed up during installation:
+To remove CombatAI completely:
 
 ```powershell
 .\uninstall.bat
 ```
 
-Removal is refused if the active file changed after installation. This prevents CombatAI
-from overwriting a DCS update or another later modification.
+The uninstaller restores the exact DCS file backed up during installation, then removes
+CombatAI's Saved Games state, local settings and logs, private runtime, Whisper workers and
+models, Piper files, and setup remnants. It verifies the cleanup and returns an error if any
+managed artifact remains. The downloaded source folder is retained so the uninstaller can
+finish reliably and because it may be a Git checkout; delete that folder manually afterward
+if it was an extracted download.
+
+Removal is refused if the active DCS file changed after installation or if a CombatAI hook
+exists without a usable manifest. This prevents CombatAI from overwriting a DCS update,
+VAICOM, or another modification.
 
 ## Configure and run
 

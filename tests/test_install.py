@@ -12,6 +12,7 @@ from tools.install import (
     file_hash,
     install_hook,
     installation_status,
+    purge_installation,
     uninstall_hook,
     _windows_command_line,
 )
@@ -48,6 +49,25 @@ class InstallTests(unittest.TestCase):
         result = uninstall_hook(self.dcs, self.saved)
         self.assertEqual(result["outcome"], "restored_active_dcs_panel")
         self.assertEqual(self.core.read_bytes(), self.original_core)
+
+    def test_full_purge_removes_saved_state_and_local_data(self) -> None:
+        install_hook(self.dcs, self.saved, self.hook)
+        local_app_data = self.root / "LocalAppData"
+        user_state = local_app_data / "CombatAI"
+        user_state.mkdir(parents=True)
+        (user_state / "config.json").write_text("{}", encoding="utf-8")
+
+        result = purge_installation(self.dcs, self.saved, local_app_data)
+
+        self.assertEqual(result["outcome"], "restored_active_dcs_panel")
+        self.assertEqual(self.core.read_bytes(), self.original_core)
+        self.assertFalse((self.saved / "Scripts" / "CombatAI").exists())
+        self.assertFalse(user_state.exists())
+
+    def test_full_purge_refuses_untracked_hook(self) -> None:
+        self.core.write_bytes(self.original_core + HOOK)
+        with self.assertRaisesRegex(InstallError, "no usable manifest"):
+            purge_installation(self.dcs, self.saved, self.root / "LocalAppData")
 
     def test_preserves_and_restores_vaicom_in_active_panel(self) -> None:
         vaicom_core = self.original_core + b"-- VAICOM server-side script\n"

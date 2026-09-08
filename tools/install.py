@@ -146,6 +146,57 @@ def uninstall_hook(dcs_install: Path, saved_games: Path) -> dict[str, Any]:
     }
 
 
+def purge_installation(
+    dcs_install: Path, saved_games: Path, local_app_data: Path | None
+) -> dict[str, Any]:
+    """Remove the verified DCS hook plus every machine-level CombatAI artifact."""
+
+    dcs_install = dcs_install.resolve()
+    saved_games = saved_games.resolve()
+    state_directory = saved_games / STATE_DIRECTORY
+    manifest_path = state_directory / MANIFEST_NAME
+    active_target = dcs_install / RELATIVE_PANEL
+
+    if manifest_path.is_file():
+        result = uninstall_hook(dcs_install, saved_games)
+    else:
+        if active_target.is_file() and BEGIN_MARKER in active_target.read_bytes():
+            raise InstallError(
+                "The active radio-panel file still contains CombatAI but no usable manifest "
+                "exists; refusing an unverifiable removal"
+            )
+        result = {"outcome": "dcs_hook_already_absent"}
+
+    cleanup_targets = [("Saved Games state", state_directory)]
+    cleanup_errors: list[str] = []
+    if local_app_data is None:
+        cleanup_errors.append(
+            "Windows LOCALAPPDATA is unavailable; user settings cannot be located"
+        )
+    else:
+        cleanup_targets.append(("local settings and logs", local_app_data / "CombatAI"))
+
+    removed: list[str] = []
+    for label, target in cleanup_targets:
+        try:
+            if target.exists():
+                shutil.rmtree(target)
+            if target.exists():
+                cleanup_errors.append(f"{label} remains at {target}")
+            else:
+                removed.append(str(target))
+        except OSError as exc:
+            cleanup_errors.append(f"could not remove {label} at {target}: {exc}")
+
+    if active_target.is_file() and BEGIN_MARKER in active_target.read_bytes():
+        cleanup_errors.append(f"the CombatAI hook remains in {active_target}")
+    if cleanup_errors:
+        raise InstallError("cleanup incomplete:\n  " + "\n  ".join(cleanup_errors))
+
+    result["purged"] = removed
+    return result
+
+
 def installation_status(dcs_install: Path, saved_games: Path) -> dict[str, Any]:
     dcs_install = dcs_install.resolve()
     saved_games = saved_games.resolve()
@@ -499,6 +550,11 @@ def main() -> int:
         command_parser.add_argument("--dcs-install", type=Path)
         command_parser.add_argument("--saved-games", type=Path)
         if name == "uninstall":
+            command_parser.add_argument(
+                "--purge",
+                action="store_true",
+                help="remove Saved Games state, local settings, logs, and backups",
+            )
             command_parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
             command_parser.add_argument("--result-file", type=Path, help=argparse.SUPPRESS)
 
@@ -515,7 +571,15 @@ def main() -> int:
         if args.command == "install":
             result = install_hook(dcs_install, saved_games, args.hook)
         elif args.command == "uninstall":
-            result = uninstall_hook(dcs_install, saved_games)
+            if args.purge:
+                local_root = os.environ.get("LOCALAPPDATA")
+                result = purge_installation(
+                    dcs_install,
+                    saved_games,
+                    Path(local_root) if local_root else None,
+                )
+            else:
+                result = uninstall_hook(dcs_install, saved_games)
         else:
             result = installation_status(dcs_install, saved_games)
     except (InstallError, FileNotFoundError, PermissionError, ValueError) as exc:
