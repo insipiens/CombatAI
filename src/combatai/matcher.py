@@ -71,7 +71,15 @@ def build_vocabulary_prompt(
 
     labels: list[str] = []
     seen: set[str] = set()
-    for label in ("Previous Menu", "Exit Menu", "F11", "F12", "Back", "Close Menu"):
+    for label in (
+        "Show Menu",
+        "Previous Menu",
+        "Exit Menu",
+        "F11",
+        "F12",
+        "Back",
+        "Close Menu",
+    ):
         candidate = prefix + ", ".join((*labels, label)) + "."
         if len(candidate) > maximum_characters:
             return prefix + ", ".join(labels) + "." if labels else ""

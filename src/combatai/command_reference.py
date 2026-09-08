@@ -205,25 +205,35 @@ def resolve_menu_navigation(
     *,
     current_path: tuple[str, ...] | None = None,
 ) -> MenuNavigation:
-    """Resolve a spoken submenu without ever returning an executable leaf."""
+    """Resolve a visual destination without ever executing a leaf command."""
     if requested_node is None:
         return MenuNavigation("found", "menu.root")
 
     menu_items = tuple(item for item in items if not item.executable)
     wanted = _compact(requested_node)
     f10_request = wanted in _F10_REQUESTS
-    if f10_request:
-        candidates = tuple(
-            item
-            for item in menu_items
-            if len(item.path) == 1 and _compact(item.path[0]) in _F10_ROOT_LABELS
-        )
-    elif current_path is not None:
+    if current_path is not None:
         candidates = tuple(
             item
             for item in menu_items
             if len(item.path) == len(current_path) + 1
             and item.path[: len(current_path)] == current_path
+        )
+        if f10_request:
+            candidates = tuple(
+                item for item in candidates if _compact(item.path[-1]) in _F10_ROOT_LABELS
+            )
+    elif f10_request:
+        candidates = tuple(
+            item
+            for item in menu_items
+            if len(item.path) == 1 and _compact(item.path[0]) in _F10_ROOT_LABELS
+        )
+    elif wanted in _KNOWN_ROOTS:
+        candidates = tuple(
+            item
+            for item in menu_items
+            if len(item.path) == 1 and _compact(item.path[0]) == wanted
         )
     else:
         candidates = menu_items
@@ -242,6 +252,52 @@ def resolve_menu_navigation(
             "ambiguous",
             choices=tuple(_display_path(item.path) for item in exact),
         )
+
+    # A request such as "Show Cover Me" names an executable leaf, but Show
+    # must never execute it.  Open (or retain) the leaf's parent menu instead.
+    # Do this before fuzzy submenu matching so "Rejoin Formation" cannot be
+    # shortened into the unrelated Formation submenu.
+    if current_path is not None:
+        leaf_candidates = tuple(
+            item
+            for item in items
+            if item.executable
+            and len(item.path) == len(current_path) + 1
+            and item.path[: len(current_path)] == current_path
+            and wanted in {_compact(_display_path(item.path)), _compact(item.path[-1])}
+        )
+    else:
+        full_leaf_matches = tuple(
+            item
+            for item in items
+            if item.executable and _compact(_display_path(item.path)) == wanted
+        )
+        leaf_candidates = full_leaf_matches or tuple(
+            item
+            for item in items
+            if item.executable and _compact(item.path[-1]) == wanted
+        )
+    if len(leaf_candidates) > 1:
+        return MenuNavigation(
+            "ambiguous",
+            choices=tuple(_display_path(item.path) for item in leaf_candidates),
+        )
+    if len(leaf_candidates) == 1:
+        parent_path = leaf_candidates[0].path[:-1]
+        if current_path is not None:
+            return MenuNavigation(
+                "leaf",
+                path=parent_path,
+                choices=(_display_path(leaf_candidates[0].path),),
+            )
+        if not parent_path:
+            return MenuNavigation("found", "menu.root")
+        parent = next(
+            (item for item in menu_items if item.path == parent_path),
+            None,
+        )
+        if parent is not None:
+            return MenuNavigation("found", parent.action_id, parent.path)
 
     if current_path is None and wanted in _KNOWN_ROOTS:
         return MenuNavigation("unavailable", path=(_KNOWN_ROOTS[wanted],))

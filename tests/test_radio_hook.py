@@ -57,13 +57,32 @@ class RadioHookTests(unittest.TestCase):
         self.assertIn('message.type ~= "open_menu"', self.source)
         self.assertIn('message.type ~= "menu_control"', self.source)
         self.assertIn('local menu = cai_state.menus[message.menu_id]', self.source)
-        self.assertIn('accepted_code = "menu_opened"', self.source)
+        self.assertIn('"menu_opened"', self.source)
         self.assertIn("setShowMenu(true)", self.source)
         capture = self.source.index("cai_capture_menu(false)", self.source.index('message.type ~= "execute"'))
         validation = self.source.index("message.revision ~= cai_state.revision")
         lookup = self.source.index("cai_state.menus[message.menu_id]")
         self.assertLess(capture, validation)
         self.assertLess(validation, lookup)
+
+    def test_guided_selection_is_relative_to_the_tracked_visible_parent(self) -> None:
+        self.assertIn('message.type ~= "select_visible"', self.source)
+        self.assertIn('message.type == "select_visible"', self.source)
+        self.assertIn('"guided_menu_not_active"', self.source)
+        self.assertIn('"not_visible"', self.source)
+        self.assertIn("cai_same_indexes(parent_indexes, cai_state.guided_indexes)", self.source)
+        self.assertIn("commandDialogsPanel.selectMenuItem(self, index)", self.source)
+
+    def test_guided_selection_never_replays_the_absolute_path(self) -> None:
+        block = re.search(
+            r"local function cai_select_visible.*?\n    end\n\n    local function cai_process",
+            self.source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(block)
+        assert block is not None
+        self.assertNotIn("switchToMainMenu", block.group())
+        self.assertNotIn("for position", block.group())
 
     def test_menu_controls_use_dcs_navigation_without_executable_actions(self) -> None:
         self.assertIn('message.type == "menu_control"', self.source)

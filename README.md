@@ -167,12 +167,14 @@ Exit Menu
 Repeat
 ```
 
-`List` speaks the immediate choices without changing the DCS display. `Show` opens the
-corresponding DCS menu without speaking or selecting a command. While that menu is visible,
-another `Show` command can open a displayed submenu; saying a displayed leaf command executes
-it normally. For example: `Show ATC` opens the DCS F5 ATC menu, `Show Biggin Hill` opens that
-airfield's submenu, and `Request Start-Up` executes the displayed command. List, show, submenu
-navigation, F11/F12 controls, and repeat cannot fall through to executable action matching.
+`List` speaks the immediate choices without changing the DCS display. `Show` starts guided menu
+mode. CombatAI keeps the DCS menu visible, and every following phrase is allowed to select only
+an item on that displayed menu. Submenus advance one level; a leaf executes and ends guided mode.
+For example: `Show ATC` opens the DCS F5 ATC menu, `Show Biggin Hill` selects that displayed
+submenu, and `Request Start-Up` executes the displayed command. A familiar complete command such
+as `Flight, Cover Me` can instead be issued directly without entering guided mode. Repetitions of
+the same completed command are ignored until a different valid demand is made. List, show,
+submenu navigation, F11/F12 controls, and repeat cannot fall through to unrelated action matching.
 `Previous Menu` (or `F11`) selects DCS's displayed Previous Menu control; `Exit Menu` (or `F12`)
 closes the radio menu. `Repeat` only says Alan's last spoken response again and never repeats an
 executed DCS action.

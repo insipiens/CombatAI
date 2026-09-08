@@ -166,7 +166,25 @@ class CommandReferenceTests(unittest.TestCase):
             "Startup",
             current_path=("ATC", "Ford"),
         )
-        self.assertEqual(leaf.status, "not_found")
+        self.assertEqual(leaf.status, "leaf")
+        self.assertEqual(leaf.path, ("ATC", "Ford"))
+
+    def test_guided_navigation_cannot_jump_to_another_root(self) -> None:
+        navigation = resolve_menu_navigation(
+            NAVIGATION_ITEMS,
+            "ATC",
+            current_path=("Other",),
+        )
+        self.assertEqual(navigation.status, "not_found")
+
+    def test_guided_root_still_understands_f10_as_other(self) -> None:
+        navigation = resolve_menu_navigation(
+            NAVIGATION_ITEMS,
+            "F10",
+            current_path=(),
+        )
+        self.assertEqual(navigation.status, "found")
+        self.assertEqual(navigation.path, ("Other",))
 
     def test_show_top_level_opens_radio_root(self) -> None:
         navigation = resolve_menu_navigation(NAVIGATION_ITEMS, None)

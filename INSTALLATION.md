@@ -195,8 +195,9 @@ Show F10
 ```
 
 `List` makes Alan speak the immediate choices without changing the on-screen DCS menu. `Show`
-opens the requested DCS menu without speaking its choices. You can use another `Show` command
-to move into a displayed submenu, then say a displayed leaf command to execute it.
+starts guided menu mode. CombatAI keeps the DCS menu visible and accepts only choices shown on
+that menu. A submenu choice advances one level; a displayed command executes and ends guided
+mode. This is intended for commands you do not remember well.
 
 For example:
 
@@ -217,6 +218,16 @@ Request Start-Up
 ```
 
 Executes the displayed command.
+
+For a familiar command, omit `Show` and give the complete command directly:
+
+```text
+Flight, Cover Me
+```
+
+CombatAI attempts that command once without putting you into guided navigation. Repeating the
+same completed demand does not create a queue of additional menu selections; a different valid
+command or menu choice must occur before the same command can be issued again.
 
 To move back up or close the displayed menu:
 

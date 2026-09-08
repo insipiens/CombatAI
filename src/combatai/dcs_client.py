@@ -95,6 +95,18 @@ class DcsMenuClient:
         self._pending[request_id] = payload
         return request_id
 
+    def select_visible(self, item_id: str, revision: int) -> str:
+        """Select one item from the menu CombatAI has left visible in DCS."""
+        request_id = self._request_id()
+        payload = self._send(
+            "select_visible",
+            request_id=request_id,
+            item_id=item_id,
+            revision=revision,
+        )
+        self._pending[request_id] = payload
+        return request_id
+
     def control_menu(self, operation: str, revision: int) -> str:
         """Select one of DCS's own non-executable menu controls."""
         if operation not in {"previous", "exit"}:

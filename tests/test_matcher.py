@@ -114,6 +114,7 @@ class MatcherTests(unittest.TestCase):
         self.assertIn("Wingman", prompt)
         self.assertIn("Biggin Hill", prompt)
         self.assertIn("Contact Air Sea Rescue", prompt)
+        self.assertIn("Show Menu", prompt)
         self.assertIn("Previous Menu", prompt)
         self.assertIn("Exit Menu", prompt)
         self.assertIn("F11", prompt)

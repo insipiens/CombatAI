@@ -86,8 +86,12 @@ def contextual_catalogue(
     executable = executable_catalogue(items)
     if visible_path is None:
         return executable
-    scoped = tuple(item for item in executable if item.path[: len(visible_path)] == visible_path)
-    return scoped or executable
+    return tuple(
+        item
+        for item in executable
+        if len(item.path) == len(visible_path) + 1
+        and item.path[: len(visible_path)] == visible_path
+    )
 
 
 def open_live_menu(
@@ -123,6 +127,34 @@ def open_live_menu(
         return refreshed_navigation, refreshed, result
     request_id = client.open_menu(refreshed_navigation.menu_id, refreshed.revision)
     return refreshed_navigation, refreshed, client.wait_for_result(request_id)
+
+
+def select_visible_item(
+    client: DcsMenuClient,
+    snapshot: MenuSnapshot,
+    item: MenuItem,
+) -> tuple[MenuSnapshot, ActionResult | None]:
+    """Select one displayed item; never reinterpret it as an absolute path."""
+    request_id = client.select_visible(item.action_id, snapshot.revision)
+    result = client.wait_for_result(request_id)
+    if result is None or result.accepted or result.code != "stale_revision":
+        return snapshot, result
+
+    refreshed = client.request_menu_and_wait(timeout=2.0)
+    if refreshed is None:
+        return snapshot, result
+    same_item = next(
+        (
+            current
+            for current in refreshed.items
+            if current.path == item.path and current.executable == item.executable
+        ),
+        None,
+    )
+    if same_item is None:
+        return refreshed, result
+    request_id = client.select_visible(same_item.action_id, refreshed.revision)
+    return refreshed, client.wait_for_result(request_id)
 
 
 def control_live_menu(
@@ -246,6 +278,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             wait_for_catalogue(client)
             known_items: dict[tuple[str, ...], MenuItem] = {}
             visible_menu_path: tuple[str, ...] | None = None
+            last_demand_key: tuple[str, str] | None = None
             while True:
                 snapshot = client.snapshot
                 assert snapshot is not None
@@ -337,6 +370,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                     if meta.kind in {"previous_menu", "exit_menu"}:
                         operation = "previous" if meta.kind == "previous_menu" else "exit"
+                        source_path = " > ".join(visible_menu_path or ())
+                        demand_key = ("menu_control", f"{operation}:{source_path}")
                         snapshot, result = control_live_menu(client, snapshot, operation)
                         remember_catalogue(known_items, snapshot.items)
                         if result is not None and result.accepted:
@@ -344,6 +379,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 visible_menu_path,
                                 operation,
                             )
+                            last_demand_key = demand_key
                             detail = (
                                 "DCS opened the previous menu."
                                 if operation == "previous"
@@ -376,34 +412,97 @@ def main(argv: Sequence[str] | None = None) -> int:
                         continue
 
                     if meta.kind == "show":
-                        navigation, snapshot, result = open_live_menu(
-                            client,
-                            snapshot,
-                            meta.node,
-                            current_path=visible_menu_path,
-                        )
-                        if (
-                            navigation.status == "not_found"
-                            and visible_menu_path is not None
-                            and meta.node is not None
-                        ):
+                        if visible_menu_path is None:
                             navigation, snapshot, result = open_live_menu(
                                 client,
                                 snapshot,
                                 meta.node,
                             )
+                        else:
+                            if meta.node is None:
+                                navigation = MenuNavigation(
+                                    "found",
+                                    "menu.root" if not visible_menu_path else None,
+                                    visible_menu_path,
+                                )
+                                result = ActionResult(
+                                    "local",
+                                    True,
+                                    "menu_already_visible",
+                                    "A guided menu is already visible",
+                                )
+                            else:
+                                navigation = resolve_menu_navigation(
+                                    snapshot.items,
+                                    meta.node,
+                                    current_path=visible_menu_path,
+                                )
+                                result = None
+                                if navigation.status == "leaf":
+                                    result = ActionResult(
+                                        "local",
+                                        True,
+                                        "command_visible",
+                                        "The requested command is on the displayed menu",
+                                    )
+                            if (
+                                meta.node is not None
+                                and navigation.status == "found"
+                                and navigation.menu_id is not None
+                                and navigation.path != visible_menu_path
+                            ):
+                                target = next(
+                                    (
+                                        item
+                                        for item in snapshot.items
+                                        if item.action_id == navigation.menu_id
+                                    ),
+                                    None,
+                                )
+                                if target is not None:
+                                    snapshot, result = select_visible_item(
+                                        client,
+                                        snapshot,
+                                        target,
+                                    )
+                            elif (
+                                meta.node is not None
+                                and navigation.status == "found"
+                                and navigation.path == visible_menu_path
+                            ):
+                                result = ActionResult(
+                                    "local",
+                                    True,
+                                    "menu_already_visible",
+                                    "The requested command is already shown",
+                                )
                         remember_catalogue(known_items, snapshot.items)
                         if result is not None and result.accepted:
                             visible_menu_path = navigation.path
-                            shown = " > ".join(navigation.path) or "radio"
-                            print(f"DCS opened the {shown} menu.")
-                            write_event(
-                                "menu_shown",
-                                transcript=transcript,
-                                node=shown,
-                                menu_id=navigation.menu_id,
-                                revision=snapshot.revision,
+                            last_demand_key = (
+                                "menu",
+                                " > ".join(navigation.path),
                             )
+                            shown = " > ".join(navigation.path) or "radio"
+                            if result.code == "command_visible":
+                                command = navigation.choices[0]
+                                print(f"{command} is displayed.")
+                                write_event(
+                                    "menu_command_visible",
+                                    transcript=transcript,
+                                    command=command,
+                                    visible_path=list(navigation.path),
+                                    revision=snapshot.revision,
+                                )
+                            else:
+                                print(f"DCS opened the {shown} menu.")
+                                write_event(
+                                    "menu_shown",
+                                    transcript=transcript,
+                                    node=shown,
+                                    menu_id=navigation.menu_id,
+                                    revision=snapshot.revision,
+                                )
                         else:
                             if navigation.status == "ambiguous":
                                 detail = "Which menu: " + ", ".join(navigation.choices)
@@ -452,17 +551,30 @@ def main(argv: Sequence[str] | None = None) -> int:
                     continue
 
                 if visible_menu_path is not None:
-                    navigation, navigated_snapshot, navigation_result = open_live_menu(
-                        client,
-                        snapshot,
+                    navigation = resolve_menu_navigation(
+                        snapshot.items,
                         transcript,
                         current_path=visible_menu_path,
                     )
                     if navigation.status == "found" and navigation.menu_id is not None:
-                        snapshot = navigated_snapshot
-                        remember_catalogue(known_items, snapshot.items)
+                        target = next(
+                            (
+                                item
+                                for item in snapshot.items
+                                if item.action_id == navigation.menu_id
+                            ),
+                            None,
+                        )
+                        navigation_result = None
+                        if target is not None:
+                            snapshot, navigation_result = select_visible_item(
+                                client,
+                                snapshot,
+                                target,
+                            )
                         if navigation_result is not None and navigation_result.accepted:
                             visible_menu_path = navigation.path
+                            last_demand_key = ("menu", " > ".join(navigation.path))
                             shown = " > ".join(navigation.path)
                             print(f"DCS opened the {shown} menu.")
                             write_event(
@@ -495,13 +607,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     minimum_score=minimum_score,
                     minimum_lead=minimum_lead,
                 )
-                if candidate is None and scoped_actions != live_actions:
-                    match = match_catalogue(transcript, live_actions)
-                    candidate = execution_candidate(
-                        match,
-                        minimum_score=minimum_score,
-                        minimum_lead=minimum_lead,
-                    )
                 ranked = [
                     {
                         "action_id": ranked_match.item.action_id,
@@ -511,6 +616,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                     for ranked_match in match.ranked[:5]
                 ]
                 if candidate is None:
+                    if visible_menu_path is not None:
+                        print("That is not an option on the displayed menu.")
+                        write_event(
+                            "command_rejected",
+                            reason="not_on_displayed_menu",
+                            transcript=transcript,
+                            visible_path=list(visible_menu_path),
+                            revision=snapshot.revision,
+                            candidates=ranked,
+                            duration_seconds=round(duration, 3),
+                            average_dbfs=round(dbfs, 2) if dbfs is not None else None,
+                            transcription_seconds=round(elapsed, 3),
+                            stt=stt_metrics,
+                        )
+                        if cues_enabled:
+                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        continue
                     unavailable = unavailable_candidate(
                         transcript,
                         live_actions,
@@ -580,6 +702,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         play_cue("rejected", volume=cue_volume, output=speech.output)
                     continue
 
+                demand_key = ("action", candidate.item.action_id)
+                if demand_key == last_demand_key:
+                    print("Repeated command ignored.")
+                    write_event(
+                        "command_debounced",
+                        transcript=transcript,
+                        action=" > ".join(candidate.item.path),
+                        action_id=candidate.item.action_id,
+                        revision=snapshot.revision,
+                    )
+                    continue
+                last_demand_key = demand_key
+                guided_execution = visible_menu_path is not None
                 _print_result(match)
                 write_event(
                     "command_sent",
@@ -596,10 +731,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 active_candidate = candidate
                 active_revision = snapshot.revision
-                request_id = client.execute(active_candidate.item.action_id, active_revision)
-                result = client.wait_for_result(request_id)
+                if guided_execution:
+                    snapshot, result = select_visible_item(
+                        client,
+                        snapshot,
+                        active_candidate.item,
+                    )
+                    active_revision = snapshot.revision
+                else:
+                    request_id = client.execute(active_candidate.item.action_id, active_revision)
+                    result = client.wait_for_result(request_id)
 
-                if result is not None and not result.accepted and result.code == "stale_revision":
+                if (
+                    not guided_execution
+                    and result is not None
+                    and not result.accepted
+                    and result.code == "stale_revision"
+                ):
                     refreshed = client.request_menu_and_wait(timeout=2.0)
                     retry_candidate = None
                     if refreshed is not None:
@@ -611,14 +759,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                             minimum_score=minimum_score,
                             minimum_lead=minimum_lead,
                         )
-                        refreshed_actions = executable_catalogue(refreshed.items)
-                        if possible_retry is None and retry_items != refreshed_actions:
-                            retry_match = match_catalogue(transcript, refreshed_actions)
-                            possible_retry = execution_candidate(
-                                retry_match,
-                                minimum_score=minimum_score,
-                                minimum_lead=minimum_lead,
-                            )
                         if (
                             possible_retry is not None
                             and (
