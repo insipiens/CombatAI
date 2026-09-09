@@ -47,6 +47,7 @@ class BootstrapTests(unittest.TestCase):
         runner = (ROOT / "run.bat").read_text(encoding="utf-8")
         diagnostic = (ROOT / "radio-menu-test.bat").read_text(encoding="utf-8")
         self.assertIn("-m dcs_radio_voice_control.launcher", runner)
+        self.assertIn("start \"\" /b /wait", runner.casefold())
         self.assertIn("-m dcs_radio_voice_control", diagnostic)
         self.assertNotIn("voice_command_test", diagnostic)
 

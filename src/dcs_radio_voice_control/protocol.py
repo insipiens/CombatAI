@@ -21,6 +21,7 @@ class MenuItem:
     label: str
     path: tuple[str, ...]
     executable: bool = True
+    slot: int | None = None
 
     @classmethod
     def from_mapping(cls, value: Any) -> "MenuItem":
@@ -36,11 +37,19 @@ class MenuItem:
         executable = value.get("executable", True)
         if not isinstance(executable, bool):
             raise ProtocolError("executable must be boolean")
+        slot = value.get("slot")
+        if slot is not None and (
+            not isinstance(slot, int)
+            or isinstance(slot, bool)
+            or not 1 <= slot <= 12
+        ):
+            raise ProtocolError("slot must be an integer from 1 to 12")
         return cls(
             action_id=action_id,
             label=label,
             path=path,
             executable=executable,
+            slot=slot,
         )
 
 

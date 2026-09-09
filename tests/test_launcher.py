@@ -31,6 +31,11 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(launcher.manual_launch([]), 3)
         run.assert_not_called()
 
+    @patch("dcs_radio_voice_control.launcher.subprocess.run", side_effect=KeyboardInterrupt)
+    @patch("dcs_radio_voice_control.launcher._prepare", return_value=(True, False))
+    def test_manual_launch_suppresses_parent_ctrl_c_traceback(self, _prepare, _run) -> None:
+        self.assertEqual(launcher.manual_launch([]), 130)
+
     def test_stop_worker_terminates_before_killing(self) -> None:
         class Worker:
             def __init__(self) -> None:

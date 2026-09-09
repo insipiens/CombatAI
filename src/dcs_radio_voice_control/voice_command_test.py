@@ -8,11 +8,18 @@ import sys
 import time
 from typing import Sequence
 
-from .alias_store import record_pending_alias, record_pending_meta_alias
+from .alias_store import (
+    record_pending_alias,
+    record_pending_meta_alias,
+    reviewed_alias,
+    reviewed_meta_alias,
+)
 from .audio_cues import play_cue
 from .command_reference import (
     MenuNavigation,
+    function_key_item,
     list_node_children,
+    parse_function_key,
     parse_meta_command,
     resolve_menu_navigation,
     spoken_listing,
@@ -27,6 +34,7 @@ from .matcher import (
     RankedMatch,
     build_vocabulary_prompt,
     match_catalogue,
+    match_reviewed_alias,
     strong_semantic_match,
 )
 from .matching_test import _print_result
@@ -359,7 +367,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     ):
                         visible_menu_path = None
 
-                meta = parse_meta_command(transcript)
+                meta_alias = reviewed_meta_alias(transcript)
+                meta = parse_meta_command(meta_alias or transcript)
+                if meta_alias is not None:
+                    write_event(
+                        "alias_applied",
+                        kind="meta",
+                        transcript=transcript,
+                        target=meta_alias,
+                        revision=snapshot.revision,
+                    )
                 if meta is not None:
                     if meta.kind == "repeat":
                         if speech.repeat():
@@ -565,7 +582,93 @@ def main(argv: Sequence[str] | None = None) -> int:
                     )
                     continue
 
-                if visible_menu_path is not None:
+                function_key = parse_function_key(transcript)
+                if function_key is not None:
+                    if visible_menu_path is None:
+                        print("No guided menu is displayed. Say Show Menu first.")
+                        write_event(
+                            "function_key_rejected",
+                            transcript=transcript,
+                            function_key=function_key,
+                            reason="guided_menu_not_active",
+                            revision=snapshot.revision,
+                        )
+                        if cues_enabled:
+                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        continue
+                    target = function_key_item(
+                        snapshot.items,
+                        visible_menu_path,
+                        function_key,
+                    )
+                    if target is None:
+                        print(f"F{function_key} is not an option on the displayed menu.")
+                        write_event(
+                            "function_key_rejected",
+                            transcript=transcript,
+                            function_key=function_key,
+                            reason="not_on_displayed_menu",
+                            visible_path=list(visible_menu_path),
+                            revision=snapshot.revision,
+                        )
+                        if cues_enabled:
+                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        continue
+                    snapshot, selection_result = select_visible_item(client, snapshot, target)
+                    if selection_result is None or not selection_result.accepted:
+                        reason = (
+                            selection_result.code
+                            if selection_result is not None
+                            else "timeout"
+                        )
+                        print(f"DCS could not select F{function_key}: {reason}.")
+                        write_event(
+                            "function_key_rejected",
+                            transcript=transcript,
+                            function_key=function_key,
+                            reason=reason,
+                            item=" > ".join(target.path),
+                            revision=snapshot.revision,
+                        )
+                        if cues_enabled:
+                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        continue
+                    last_demand_key = (
+                        "action" if target.executable else "menu",
+                        target.action_id if target.executable else " > ".join(target.path),
+                    )
+                    print(f"DCS selected F{function_key}: {' > '.join(target.path)}.")
+                    write_event(
+                        "function_key_selected",
+                        transcript=transcript,
+                        function_key=function_key,
+                        item=" > ".join(target.path),
+                        item_id=target.action_id,
+                        executable=target.executable,
+                        revision=snapshot.revision,
+                    )
+                    if target.executable:
+                        visible_menu_path = None
+                        if cues_enabled:
+                            play_cue("accepted", volume=cue_volume, output=speech.output)
+                        wait_for_catalogue(client)
+                        if client.snapshot is not None:
+                            remember_catalogue(known_items, client.snapshot.items)
+                    else:
+                        visible_menu_path = target.path
+                    continue
+
+                action_alias = reviewed_alias(transcript)
+                if action_alias is not None:
+                    write_event(
+                        "alias_applied",
+                        kind="action",
+                        transcript=transcript,
+                        target=action_alias,
+                        revision=snapshot.revision,
+                    )
+
+                if visible_menu_path is not None and action_alias is None:
                     navigation = resolve_menu_navigation(
                         snapshot.items,
                         transcript,
@@ -616,7 +719,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 live_actions = executable_catalogue(snapshot.items)
                 scoped_actions = contextual_catalogue(snapshot.items, visible_menu_path)
-                match = match_catalogue(transcript, scoped_actions)
+                match_transcript = action_alias or transcript
+                match = (
+                    match_reviewed_alias(action_alias, scoped_actions)
+                    if action_alias is not None
+                    else match_catalogue(transcript, scoped_actions)
+                )
                 candidate = execution_candidate(
                     match,
                     minimum_score=minimum_score,
@@ -649,7 +757,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                             play_cue("rejected", volume=cue_volume, output=speech.output)
                         continue
                     unavailable = unavailable_candidate(
-                        transcript,
+                        match_transcript,
                         live_actions,
                         known_items,
                         minimum_score=minimum_score,
@@ -698,6 +806,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     alias_recorded = bool(
                         match.best is not None
                         and match.best.score >= MINIMUM_ALIAS_CANDIDATE_SCORE
+                        and action_alias is None
                         and record_pending_alias(transcript)
                     )
                     print("Nothing was sent to DCS.")

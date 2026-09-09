@@ -187,6 +187,9 @@ Repeat
 `List` speaks the immediate choices without changing the DCS display. `Show` starts guided menu
 mode. DCS Radio Voice Control keeps the DCS menu visible, and every following phrase is allowed to select only
 an item on that displayed menu. Submenus advance one level; a leaf executes and ends guided mode.
+The displayed item may be selected by name or by its bare `F1`-`F10` key. Function keys are
+resolved only against the visible menu; `Show F5` remains non-executing, while `F5` selects the
+displayed item.
 For example: `Show ATC` opens the DCS F5 ATC menu, `Show Biggin Hill` selects that displayed
 submenu, and `Request Start-Up` executes the displayed command. A familiar complete command such
 as `Flight, Cover Me` can instead be issued directly without entering guided mode. Repetitions of
@@ -195,6 +198,10 @@ submenu navigation, F11/F12 controls, and repeat cannot fall through to unrelate
 `Previous Menu` (or `F11`) selects DCS's displayed Previous Menu control; `Exit Menu` (or `F12`)
 closes the radio menu. `Repeat` only says Alan's last spoken response again and never repeats an
 executed DCS action.
+
+Rejected action and application phrases are recorded separately under
+`%LOCALAPPDATA%\DCSRadioVoiceControl`. Replacing a candidate's `null` value with an exact unique
+command path activates that reviewed alias; configured targets are never fuzzily reinterpreted.
 
 ## Developer diagnostics
 

@@ -4,7 +4,9 @@ import unittest
 
 from dcs_radio_voice_control.command_reference import (
     MetaCommand,
+    function_key_item,
     list_node_children,
+    parse_function_key,
     parse_meta_command,
     resolve_menu_navigation,
     spoken_listing,
@@ -24,10 +26,10 @@ ITEMS = (
 )
 
 NAVIGATION_ITEMS = ITEMS + (
-    MenuItem("menu.5", "ATC", ("ATC",), executable=False),
-    MenuItem("menu.5.1", "Ford", ("ATC", "Ford"), executable=False),
-    MenuItem("menu.5.2", "Tangmere", ("ATC", "Tangmere"), executable=False),
-    MenuItem("menu.10", "Other", ("Other",), executable=False),
+    MenuItem("menu.5", "ATC", ("ATC",), executable=False, slot=5),
+    MenuItem("menu.5.1", "Ford", ("ATC", "Ford"), executable=False, slot=1),
+    MenuItem("menu.5.2", "Tangmere", ("ATC", "Tangmere"), executable=False, slot=2),
+    MenuItem("menu.10", "Other", ("Other",), executable=False, slot=10),
 )
 
 
@@ -85,6 +87,22 @@ class CommandReferenceTests(unittest.TestCase):
         for phrase in ("Exit", "Exit Menu", "F12", "F-12", "Close Menu", "Show Exit Menu"):
             with self.subTest(phrase=phrase):
                 self.assertEqual(parse_meta_command(phrase), MetaCommand("exit_menu"))
+
+    def test_parses_bare_guided_function_keys(self) -> None:
+        for phrase, expected in (("F1", 1), ("F-5", 5), ("F 10.", 10)):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(parse_function_key(phrase), expected)
+        self.assertIsNone(parse_function_key("Show F5"))
+        self.assertIsNone(parse_function_key("F11"))
+
+    def test_function_key_selects_only_the_visible_slot(self) -> None:
+        root = function_key_item(NAVIGATION_ITEMS, (), 5)
+        self.assertIsNotNone(root)
+        self.assertEqual(root.path, ("ATC",))  # type: ignore[union-attr]
+        nested = function_key_item(NAVIGATION_ITEMS, ("ATC",), 2)
+        self.assertIsNotNone(nested)
+        self.assertEqual(nested.path, ("ATC", "Tangmere"))  # type: ignore[union-attr]
+        self.assertIsNone(function_key_item(NAVIGATION_ITEMS, ("Other",), 5))
 
     def test_lists_immediate_children_only(self) -> None:
         listing = list_node_children(ITEMS, "ATC")

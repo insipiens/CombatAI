@@ -24,6 +24,24 @@ def _key(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", text.casefold())).strip()
 
 
+def reviewed_alias(transcript: str, path: Path | None = None) -> str | None:
+    """Return an exact, human-reviewed alias mapping; ignore null candidates."""
+    target = path or pending_alias_path()
+    try:
+        loaded = json.loads(target.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    value = loaded.get(_key(transcript))
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def reviewed_meta_alias(transcript: str, path: Path | None = None) -> str | None:
+    """Return a reviewed alias for an application-side spoken command."""
+    return reviewed_alias(transcript, path or pending_meta_alias_path())
+
+
 def record_pending_alias(transcript: str, path: Path | None = None) -> bool:
     """Add a phrase with a null mapping; never overwrite a reviewed mapping."""
     key = _key(transcript)

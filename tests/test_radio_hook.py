@@ -99,11 +99,20 @@ class RadioHookTests(unittest.TestCase):
         self.assertLess(capture, validation)
 
     def test_status_and_snapshots_advertise_runtime_capabilities(self) -> None:
-        self.assertIn("local drvc_hook_version = 2", self.source)
-        for capability in ("guided_selection", "menu_control", "staged_transactions"):
+        self.assertIn("local drvc_hook_version = 3", self.source)
+        for capability in (
+            "function_key_selection",
+            "guided_selection",
+            "menu_control",
+            "staged_transactions",
+        ):
             self.assertIn(f'"{capability}"', self.source)
         self.assertGreaterEqual(self.source.count("hook_version = drvc_hook_version"), 2)
         self.assertGreaterEqual(self.source.count("capabilities = drvc_capabilities"), 2)
+
+    def test_every_exported_item_includes_its_displayed_function_key_slot(self) -> None:
+        self.assertIn("slot = indexes[#indexes]", self.source)
+        self.assertIn("slot = item_indexes[#item_indexes]", self.source)
 
 
 if __name__ == "__main__":

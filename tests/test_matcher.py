@@ -11,6 +11,7 @@ from dcs_radio_voice_control.matcher import (
     build_vocabulary_prompt,
     critical_terms_compatible,
     match_catalogue,
+    match_reviewed_alias,
     normalize_phrase,
     strong_semantic_match,
 )
@@ -108,6 +109,14 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.best.item.action_id, "f10.10.1")  # type: ignore[union-attr]
         self.assertIsNotNone(execution_candidate(result))
 
+    def test_reviewed_alias_target_requires_an_exact_unique_command(self) -> None:
+        exact = match_reviewed_alias("Flight > Maneuvers > Break Left", ITEMS)
+        self.assertEqual(exact.status, "matched")
+        self.assertEqual(exact.best.item.action_id, "radio.2.4.2")  # type: ignore[union-attr]
+        ambiguous = match_reviewed_alias("Break Left", ITEMS)
+        self.assertEqual(ambiguous.status, "ambiguous")
+        self.assertEqual(match_reviewed_alias("Flight Break", ITEMS).status, "no_match")
+
     def test_live_vocabulary_prompt_prioritizes_path_levels_and_deduplicates(self) -> None:
         prompt = build_vocabulary_prompt(ITEMS)
         self.assertTrue(prompt.startswith("DCS radio command vocabulary:"))
@@ -117,6 +126,8 @@ class MatcherTests(unittest.TestCase):
         self.assertIn("Show Menu", prompt)
         self.assertIn("Previous Menu", prompt)
         self.assertIn("Exit Menu", prompt)
+        self.assertIn("F1", prompt)
+        self.assertIn("F10", prompt)
         self.assertIn("F11", prompt)
         self.assertIn("F12", prompt)
         self.assertEqual(prompt.count("Break Left"), 1)

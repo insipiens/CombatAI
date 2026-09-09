@@ -5,7 +5,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from dcs_radio_voice_control.alias_store import record_pending_alias, record_pending_meta_alias
+from dcs_radio_voice_control.alias_store import (
+    record_pending_alias,
+    record_pending_meta_alias,
+    reviewed_alias,
+    reviewed_meta_alias,
+)
 
 
 class AliasStoreTests(unittest.TestCase):
@@ -30,6 +35,33 @@ class AliasStoreTests(unittest.TestCase):
             path = Path(directory) / "pending_meta_aliases.json"
             self.assertTrue(record_pending_meta_alias("List of a Command", path))
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"list of a command": None})
+
+    def test_reviewed_alias_is_loaded_but_null_candidate_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pending_aliases.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "flight rejoin": "Flight > Rejoin Formation",
+                        "flight rejoyed": None,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                reviewed_alias("Flight, rejoin.", path),
+                "Flight > Rejoin Formation",
+            )
+            self.assertIsNone(reviewed_alias("Flight, rejoyed.", path))
+
+    def test_reviewed_meta_alias_uses_meta_store(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pending_meta_aliases.json"
+            path.write_text('{"list over": "List Other commands"}\n', encoding="utf-8")
+            self.assertEqual(
+                reviewed_meta_alias("List over.", path),
+                "List Other commands",
+            )
 
 
 if __name__ == "__main__":

@@ -75,6 +75,16 @@ def build_vocabulary_prompt(
         "Show Menu",
         "Previous Menu",
         "Exit Menu",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
         "F11",
         "F12",
         "Back",
@@ -141,6 +151,21 @@ def match_catalogue(
     if len(contenders) > 1:
         return MatchResult("ambiguous", contenders[:5], diagnostic)
     return MatchResult("matched", (ranked[0],), diagnostic)
+
+
+def match_reviewed_alias(target: str, items: tuple[MenuItem, ...]) -> MatchResult:
+    """Resolve a reviewed mapping exactly; never fuzz a configured alias target."""
+    wanted = normalize_phrase(target)
+    matches = tuple(
+        RankedMatch(item, 1.0, exact=True)
+        for item in items
+        if any(wanted == form for form, _ in _spoken_forms(item))
+    )
+    if not matches:
+        return MatchResult("no_match", ())
+    if len(matches) > 1:
+        return MatchResult("ambiguous", matches[:5], matches[:5])
+    return MatchResult("matched", matches, matches)
 
 
 def _spoken_forms(item: MenuItem) -> tuple[tuple[str, bool], ...]:

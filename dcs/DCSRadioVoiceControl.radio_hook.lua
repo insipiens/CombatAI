@@ -16,9 +16,10 @@ do
     local drvc_gui = drvc_base.require("dxgui")
 
     local drvc_protocol_version = 1
-    local drvc_hook_version = 2
+    local drvc_hook_version = 3
     local drvc_capabilities = {
         "guided_selection",
+        "function_key_selection",
         "menu_control",
         "staged_transactions",
     }
@@ -130,6 +131,7 @@ do
             label = path[#path],
             path = path,
             executable = false,
+            slot = indexes[#indexes],
         }
         signature_parts[#signature_parts + 1] =
             menu_id .. "\30" .. drvc_base.table.concat(path, "\31") .. "\30false"
@@ -180,6 +182,7 @@ do
                         label = label,
                         path = item_path,
                         executable = executable,
+                        slot = item_indexes[#item_indexes],
                     }
                     signature_parts[#signature_parts + 1] =
                         action_id .. "\30" ..

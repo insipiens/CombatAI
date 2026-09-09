@@ -17,7 +17,12 @@ from .protocol import MenuSnapshot, ProtocolError, decode_message, encode_messag
 
 LOG = logging.getLogger(__name__)
 REQUIRED_HOOK_CAPABILITIES = frozenset(
-    {"guided_selection", "menu_control", "staged_transactions"}
+    {
+        "function_key_selection",
+        "guided_selection",
+        "menu_control",
+        "staged_transactions",
+    }
 )
 
 

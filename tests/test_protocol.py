@@ -43,6 +43,7 @@ class ProtocolTests(unittest.TestCase):
                         "action_id": "f10.1",
                         "label": "Play recording",
                         "path": ["Briefing", "Play recording"],
+                        "slot": 7,
                     }
                 ],
             }
@@ -50,6 +51,24 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(snapshot.revision, 7)
         self.assertEqual(snapshot.items[0].path[-1], "Play recording")
         self.assertTrue(snapshot.items[0].executable)
+        self.assertEqual(snapshot.items[0].slot, 7)
+
+    def test_rejects_invalid_function_key_slot(self) -> None:
+        with self.assertRaisesRegex(ProtocolError, "slot"):
+            MenuSnapshot.from_message(
+                {
+                    "type": "menu_snapshot",
+                    "revision": 1,
+                    "items": [
+                        {
+                            "action_id": "radio.1",
+                            "label": "Invalid",
+                            "path": ["Invalid"],
+                            "slot": 13,
+                        }
+                    ],
+                }
+            )
 
     def test_parses_display_only_standard_radio_item(self) -> None:
         snapshot = MenuSnapshot.from_message(

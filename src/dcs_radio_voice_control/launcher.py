@@ -305,7 +305,17 @@ def manual_launch(voice_arguments: Sequence[str]) -> int:
         return 3
     if not ready:
         return 2
-    return subprocess.run([*VOICE_COMMAND, *voice_arguments], cwd=PROJECT_ROOT, check=False).returncode
+    try:
+        return subprocess.run(
+            [*VOICE_COMMAND, *voice_arguments],
+            cwd=PROJECT_ROOT,
+            check=False,
+        ).returncode
+    except KeyboardInterrupt:
+        # Windows delivers Ctrl+C to both the voice worker and this waiting
+        # launcher.  The worker has already stopped cleanly; do not expose a
+        # second traceback from the parent process.
+        return 130
 
 
 def main(argv: Sequence[str] | None = None) -> int:

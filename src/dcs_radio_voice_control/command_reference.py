@@ -106,6 +106,28 @@ def parse_meta_command(transcript: str) -> MetaCommand | None:
     return MetaCommand("list", node=node or None)
 
 
+def parse_function_key(transcript: str) -> int | None:
+    """Return a bare spoken DCS function key, excluding F11/F12 controls."""
+    match = re.fullmatch(r"f\s*-?\s*(10|[1-9])", _normalise(transcript))
+    return int(match.group(1)) if match else None
+
+
+def function_key_item(
+    items: tuple[MenuItem, ...],
+    current_path: tuple[str, ...],
+    slot: int,
+) -> MenuItem | None:
+    """Resolve one exact numbered choice on the currently displayed menu."""
+    candidates = tuple(
+        item
+        for item in items
+        if item.slot == slot
+        and len(item.path) == len(current_path) + 1
+        and item.path[: len(current_path)] == current_path
+    )
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _menu_nodes(items: tuple[MenuItem, ...]) -> dict[tuple[str, ...], tuple[str, ...]]:
     children_by_path: dict[tuple[str, ...], list[str]] = {}
     for item in items:

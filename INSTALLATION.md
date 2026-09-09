@@ -212,6 +212,12 @@ starts guided menu mode. DCS Radio Voice Control keeps the DCS menu visible and 
 that menu. A submenu choice advances one level; a displayed command executes and ends guided
 mode. This is intended for commands you do not remember well.
 
+While a guided menu is visible, you may say either the displayed option name or its bare
+function key from `F1` through `F10`. For example, saying `F5` at the main radio menu selects
+the item currently displayed beside F5. Function keys are always interpreted relative to the
+visible menu; they are never fuzzy-matched or replayed as an absolute path. `Show F5` does not
+execute a command: say `F5` by itself to select the displayed item.
+
 For example:
 
 ```text
@@ -260,6 +266,24 @@ Selects DCS's **F12 Exit** behaviour and closes the radio menu. You may also say
 `Repeat` only says Alan's last spoken response again, principally after a `List` request. It
 never sends or repeats a DCS action. If Alan has not spoken, DCS Radio Voice Control reports `Nothing spoken
 to repeat.`
+
+Rejected phrases that resemble a command are recorded for review in:
+
+```text
+%LOCALAPPDATA%\DCSRadioVoiceControl\pending_aliases.json
+```
+
+Application-side phrases such as an unrecognised `List` request are recorded separately in
+`pending_meta_aliases.json` in the same folder. A `null` value is only a candidate and has no
+effect. To approve an alias, replace `null` with one exact, unambiguous command path, for
+example:
+
+```json
+"flight rejoin": "Flight > Rejoin Formation"
+```
+
+Reviewed mappings are loaded automatically. Their targets must exactly identify one current
+DCS command; an invalid or ambiguous mapping is rejected rather than fuzzily reinterpreted.
 
 DCS Radio Voice Control sends a command only when the recognition result passes both configured safety gates.
 An accepted response confirms that DCS ran the menu action; a mission script can still decide
