@@ -218,6 +218,15 @@ These test utilities are not part of normal installation or everyday use:
 Only one Windows process can own DCS Radio Voice Control's UDP listener. Close `run.bat` before starting a
 radio-menu or matching diagnostic.
 
+End-user builds are created with:
+
+```powershell
+.\runtime\python.exe .\tools\package_release.py
+```
+
+This produces `dist\DCS-Radio-Voice-Control.zip` with the application files at the archive
+root. GitHub's automatically named branch/source archives are for development only.
+
 If no catalogue arrives, confirm that a mission is active, check installer status, verify
 that DCS owns UDP port `34383` and DCS Radio Voice Control owns `34384`, then inspect
 `Saved Games\DCS\Logs\dcs.log`.

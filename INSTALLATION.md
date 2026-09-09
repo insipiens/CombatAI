@@ -30,7 +30,8 @@ Launch DCS at least once before installing DCS Radio Voice Control. This creates
 
 ## 1. Download and extract DCS Radio Voice Control
 
-1. Download the DCS Radio Voice Control ZIP supplied for the version you want to install.
+1. Download the release asset named `DCS-Radio-Voice-Control.zip`. Do not use GitHub's
+   automatically generated **Source code** or branch ZIPs.
 2. Open your Downloads folder in File Explorer.
 3. Right-click the ZIP and select **Extract All**.
 4. Extract it into your Windows user folder. The final folder should be named
