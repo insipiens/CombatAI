@@ -7,24 +7,18 @@ from difflib import SequenceMatcher
 import re
 import unicodedata
 
+from .alias_store import reviewed_aliases
 from .protocol import MenuItem
 
 
 MINIMUM_SCORE = 0.60
 AMBIGUITY_MARGIN = 0.02
 MAX_PROMPT_CHARACTERS = 1_500
-_SCOPES = ("second element", "wingman", "flight", "atc")
+_SCOPES = ("second element", "ground crew", "wingman", "flight", "other", "atc")
 _LEADING_POLITENESS = {"please"}
 _RECIPIENT_VERBS = {"ask", "order", "tell"}
 _RECIPIENT_ARTICLES = {"my", "the"}
 _RECIPIENT_CONNECTORS = {"to"}
-_RECIPIENT_ALIASES = (
-    (("three", "and", "four"), "second element"),
-    (("number", "two"), "wingman"),
-    (("element",), "second element"),
-    (("two",), "wingman"),
-    (("2",), "wingman"),
-)
 _EXCLUSIVE_TERMS = (
     frozenset({"start", "stop"}),
     frozenset({"on", "off"}),
@@ -283,8 +277,10 @@ def _is_subsequence(needle: list[str], haystack: list[str]) -> bool:
 def recipient_scope(transcript: str) -> RecipientScope | None:
     """Split an exact leading recipient from the command it constrains.
 
-    Recipient aliases select a catalogue subtree only.  They are removed before
-    scoring, so they cannot contribute similarity evidence for the action.
+    Canonical DCS recipient names remain valid directly. Additional spoken
+    vocabulary comes only from reviewed aliases whose targets are recipient
+    menu nodes. The recipient is removed before action scoring, so an alias can
+    constrain the catalogue but can never improve the command score.
     """
     spoken = normalize_phrase(transcript)
     words = spoken.split()
@@ -294,7 +290,16 @@ def recipient_scope(transcript: str) -> RecipientScope | None:
         words.pop(0)
         if words and words[0] in _RECIPIENT_ARTICLES:
             words.pop(0)
-    for alias_words, scope in _RECIPIENT_ALIASES:
+
+    configured: list[tuple[tuple[str, ...], str]] = []
+    for alias, target in reviewed_aliases().items():
+        scope = normalize_phrase(target)
+        alias_words = tuple(normalize_phrase(alias).split())
+        if scope in _SCOPES and alias_words:
+            configured.append((alias_words, scope))
+    configured.sort(key=lambda entry: (-len(entry[0]), entry[0]))
+
+    for alias_words, scope in configured:
         if tuple(words[: len(alias_words)]) != alias_words:
             continue
         remainder = words[len(alias_words) :]

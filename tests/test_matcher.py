@@ -73,38 +73,64 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "radio.1.4.1")  # type: ignore[union-attr]
 
-    def test_number_two_alias_scopes_but_does_not_score_the_action(self) -> None:
-        scope = recipient_scope("Two, great left")
+    def test_configured_two_alias_scopes_but_does_not_score_the_action(self) -> None:
+        with patch(
+            "dcs_radio_voice_control.matcher.reviewed_aliases",
+            return_value={"two": "Wingman"},
+        ):
+            scope = recipient_scope("Two, great left")
+            result = match_catalogue("Two, great left", ITEMS)
         self.assertEqual(scope.scope, "wingman")  # type: ignore[union-attr]
         self.assertEqual(scope.command, "great left")  # type: ignore[union-attr]
         self.assertEqual(scope.alias, "two")  # type: ignore[union-attr]
-        result = match_catalogue("Two, great left", ITEMS)
         wingman_items = tuple(item for item in ITEMS if item.path[0] == "Wingman")
         unscoped_score = match_catalogue("great left", wingman_items).best.score  # type: ignore[union-attr]
         self.assertEqual(result.best.item.action_id, "radio.1.4.2")  # type: ignore[union-attr]
         self.assertEqual(result.best.score, unscoped_score)  # type: ignore[union-attr]
 
-    def test_numeric_two_alias_is_equivalent_to_number_two(self) -> None:
-        result = match_catalogue("2 break right", ITEMS)
-        self.assertEqual(result.best.item.action_id, "radio.1.4.1")  # type: ignore[union-attr]
+    def test_recipient_vocabulary_is_not_hard_coded(self) -> None:
+        with patch("dcs_radio_voice_control.matcher.reviewed_aliases", return_value={}):
+            self.assertIsNone(recipient_scope("Two, break left"))
+            self.assertIsNone(recipient_scope("2 break left"))
+            self.assertIsNone(recipient_scope("Element break left"))
+            self.assertIsNone(recipient_scope("Three and four, break left"))
 
-    def test_element_alias_scopes_second_element(self) -> None:
-        result = match_catalogue("Element break left", ITEMS)
+    def test_configured_element_alias_scopes_second_element(self) -> None:
+        with patch(
+            "dcs_radio_voice_control.matcher.reviewed_aliases",
+            return_value={"element": "Second Element"},
+        ):
+            result = match_catalogue("Element break left", ITEMS)
         self.assertEqual(result.best.item.action_id, "radio.3.4.2")  # type: ignore[union-attr]
 
-    def test_three_and_four_alias_scopes_second_element(self) -> None:
-        result = match_catalogue("Three and four, break left", ITEMS)
+    def test_configured_multiword_alias_scopes_second_element(self) -> None:
+        with patch(
+            "dcs_radio_voice_control.matcher.reviewed_aliases",
+            return_value={"three and four": "Second Element"},
+        ):
+            result = match_catalogue("Three and four, break left", ITEMS)
         self.assertEqual(result.best.item.action_id, "radio.3.4.2")  # type: ignore[union-attr]
 
     def test_recipient_alias_alone_cannot_nominate_an_action(self) -> None:
-        self.assertEqual(match_catalogue("Two", ITEMS).status, "no_match")
+        with patch(
+            "dcs_radio_voice_control.matcher.reviewed_aliases",
+            return_value={"two": "Wingman"},
+        ):
+            self.assertEqual(match_catalogue("Two", ITEMS).status, "no_match")
 
     def test_homophones_are_not_recipient_aliases(self) -> None:
-        self.assertIsNone(recipient_scope("to break left"))
-        self.assertIsNone(recipient_scope("too break left"))
+        with patch(
+            "dcs_radio_voice_control.matcher.reviewed_aliases",
+            return_value={"two": "Wingman"},
+        ):
+            self.assertIsNone(recipient_scope("to break left"))
+            self.assertIsNone(recipient_scope("too break left"))
 
     def test_scoped_alias_cannot_use_a_legacy_whole_command_override(self) -> None:
         with patch(
+            "dcs_radio_voice_control.matcher.reviewed_aliases",
+            return_value={"two": "Wingman"},
+        ), patch(
             "dcs_radio_voice_control.voice_command_test.reviewed_alias",
             return_value="Wingman > Maneuvers > Break Left",
         ):

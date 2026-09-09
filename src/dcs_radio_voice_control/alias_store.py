@@ -24,17 +24,25 @@ def _key(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", text.casefold())).strip()
 
 
-def reviewed_alias(transcript: str, path: Path | None = None) -> str | None:
-    """Return an exact, human-reviewed alias mapping; ignore null candidates."""
+def reviewed_aliases(path: Path | None = None) -> dict[str, str]:
+    """Return all non-null, human-reviewed alias mappings."""
     target = path or pending_alias_path()
     try:
         loaded = json.loads(target.read_text(encoding="utf-8"))
     except (FileNotFoundError, OSError, json.JSONDecodeError):
-        return None
+        return {}
     if not isinstance(loaded, dict):
-        return None
-    value = loaded.get(_key(transcript))
-    return value.strip() if isinstance(value, str) and value.strip() else None
+        return {}
+    return {
+        _key(str(name)): value.strip()
+        for name, value in loaded.items()
+        if _key(str(name)) and isinstance(value, str) and value.strip()
+    }
+
+
+def reviewed_alias(transcript: str, path: Path | None = None) -> str | None:
+    """Return an exact, human-reviewed alias mapping; ignore null candidates."""
+    return reviewed_aliases(path).get(_key(transcript))
 
 
 def reviewed_meta_alias(transcript: str, path: Path | None = None) -> str | None:
