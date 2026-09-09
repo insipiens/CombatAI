@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from types import ModuleType
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -43,6 +44,53 @@ class FakeMixer:
 
 
 class AudioOutputTests(unittest.TestCase):
+    def test_device_enumeration_temporarily_initializes_sdl_audio(self) -> None:
+        class EnumerationMixer:
+            def __init__(self) -> None:
+                self.ready = False
+                self.init_count = 0
+                self.quit_count = 0
+
+            def get_init(self) -> tuple[int, int, int] | None:
+                return (44_100, -16, 2) if self.ready else None
+
+            def init(self) -> None:
+                self.ready = True
+                self.init_count += 1
+
+            def quit(self) -> None:
+                self.ready = False
+                self.quit_count += 1
+
+        mixer = EnumerationMixer()
+        pygame = ModuleType("pygame")
+        pygame.mixer = mixer  # type: ignore[attr-defined]
+        audio = ModuleType("pygame._sdl2.audio")
+
+        def names(_capture: bool) -> tuple[str, ...]:
+            if not mixer.ready:
+                raise RuntimeError("Audio system not initialized")
+            return ("Pimax Crystal Super", "Speakers", "Pimax Crystal Super")
+
+        audio.get_audio_device_names = names  # type: ignore[attr-defined]
+        sdl2 = ModuleType("pygame._sdl2")
+        sdl2.audio = audio  # type: ignore[attr-defined]
+        with patch.dict(
+            sys.modules,
+            {
+                "pygame": pygame,
+                "pygame._sdl2": sdl2,
+                "pygame._sdl2.audio": audio,
+            },
+        ):
+            self.assertEqual(
+                AudioOutput.devices(),
+                ["Pimax Crystal Super", "Speakers"],
+            )
+
+        self.assertEqual(mixer.init_count, 1)
+        self.assertEqual(mixer.quit_count, 1)
+
     def test_pcm_rate_cannot_be_changed_by_sdl(self) -> None:
         mixer = FakeMixer()
         pygame = SimpleNamespace(mixer=mixer)

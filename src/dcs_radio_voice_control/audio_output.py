@@ -18,12 +18,22 @@ class AudioOutput:
     @staticmethod
     def devices() -> list[str]:
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+        import pygame
         from pygame._sdl2 import audio
 
+        mixer_was_ready = pygame.mixer.get_init() is not None
         try:
-            return list(audio.get_audio_device_names(False))
+            if not mixer_was_ready:
+                # SDL exposes no endpoint names until its audio subsystem has
+                # been initialized.  Open the default device only for the
+                # duration of discovery, then restore the previous state.
+                pygame.mixer.init()
+            return list(dict.fromkeys(audio.get_audio_device_names(False)))
         except RuntimeError:
             return []
+        finally:
+            if not mixer_was_ready and pygame.mixer.get_init() is not None:
+                pygame.mixer.quit()
 
     def play_pcm(self, pcm: bytes, *, sample_rate: int, volume: float = 1.0) -> None:
         if not pcm:
