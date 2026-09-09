@@ -98,6 +98,13 @@ class RadioHookTests(unittest.TestCase):
         validation = self.source.index("message.revision ~= cai_state.revision")
         self.assertLess(capture, validation)
 
+    def test_status_and_snapshots_advertise_runtime_capabilities(self) -> None:
+        self.assertIn("local cai_hook_version = 2", self.source)
+        for capability in ("guided_selection", "menu_control", "staged_transactions"):
+            self.assertIn(f'"{capability}"', self.source)
+        self.assertGreaterEqual(self.source.count("hook_version = cai_hook_version"), 2)
+        self.assertGreaterEqual(self.source.count("capabilities = cai_capabilities"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

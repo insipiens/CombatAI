@@ -17,6 +17,7 @@ from .command_reference import (
     resolve_menu_navigation,
     spoken_listing,
 )
+from .controller_state import set_state as set_controller_state
 from .configuration_store import load_document
 from .dcs_client import ActionResult, DcsMenuClient
 from .event_log import write_event
@@ -215,6 +216,11 @@ def wait_for_catalogue(client: DcsMenuClient) -> None:
             print("DCS is not responding yet. Start DCS and enter a mission; Ctrl+C stops CombatAI.")
         elif attempts % 5 == 0:
             print("Still waiting for an active DCS mission ...")
+    if client.hook_status is None or not client.hook_status.compatible:
+        raise OSError(
+            "DCS loaded an older CombatAI hook. Close DCS completely, run CombatAI "
+            "once to update it, then start DCS again."
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -227,6 +233,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--maximum-seconds must be greater than zero")
 
     try:
+        # Keep Whisper, Piper, the microphone, and SDL unloaded until DCS has
+        # actually initialized the current CombatAI hook for a mission.
+        print("Waiting for DCS and an active mission...", flush=True)
+        with DcsMenuClient() as readiness_client:
+            wait_for_catalogue(readiness_client)
         audio = WinMmAudioInput()
         settings = load_document()
         microphone = resolve_selection(audio.microphones(), load_selection())
@@ -276,6 +287,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         with DcsMenuClient() as client:
             wait_for_catalogue(client)
+            try:
+                set_controller_state("Ready", "DCS voice control is active.")
+            except OSError:
+                pass
             known_items: dict[tuple[str, ...], MenuItem] = {}
             visible_menu_path: tuple[str, ...] | None = None
             last_demand_key: tuple[str, str] | None = None
@@ -823,6 +838,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("\nCancelled.")
         return 130
     except OSError as exc:
+        if "older CombatAI hook" in str(exc):
+            try:
+                set_controller_state("Restart DCS", str(exc))
+            except OSError:
+                pass
         print(f"CombatAI voice control failed: {exc}", file=sys.stderr)
         return 2
 

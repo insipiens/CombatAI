@@ -166,7 +166,9 @@ On the page:
 3. Under **Push to talk**, click **Learn a HOTAS button**, then press and release the button you
    want. If you do not want to use a controller, click **Use Space only**.
 4. Leave the default `base.en`, CPU, and command-matching settings selected for the first test.
-5. Click **Save configuration** and wait for the message **Configuration saved.**
+5. Optional: select **Start CombatAI with Windows**. This installs a per-user sign-in entry;
+   it does not require administrator permission.
+6. Click **Save configuration** and wait for the message **Configuration saved.**
 
 You can now close the browser tab and press Ctrl+C in the configuration PowerShell window.
 Configuration is stored at `%LOCALAPPDATA%\CombatAI\config.json` and is kept when you update
@@ -180,6 +182,9 @@ the source files.
    .\run.bat
    ```
 
+   `run.bat` first checks whether the installed DCS hook matches this CombatAI version. It asks
+   for administrator permission only if the hook must be installed or updated. If DCS was
+   already running when an update was needed, close DCS completely and restart it when asked.
 2. Leave that PowerShell window open.
 3. Start DCS and enter a mission in which the radio menu is available. CombatAI will wait for a
    live DCS command catalogue.
@@ -256,7 +261,7 @@ To stop CombatAI, return to its PowerShell window and press Ctrl+C.
 
 ## Everyday use
 
-For each session:
+If **Start CombatAI with Windows** is disabled, use this manual sequence for each session:
 
 1. Run `.\run.bat` from the CombatAI folder.
 2. Start DCS and enter the mission.
@@ -265,6 +270,12 @@ For each session:
 
 Only one CombatAI test or runner can listen to DCS at a time. Close any earlier CombatAI
 PowerShell window before starting another one.
+
+If **Start CombatAI with Windows** is enabled, no daily command is needed. The lightweight
+controller starts when you sign in and waits for DCS. Whisper, Piper, the microphone, SDL, and
+optional CUDA support remain unloaded until DCS has entered a mission and the current hook is
+responding. CombatAI then becomes **Ready** and stops the voice worker automatically when DCS
+exits. Disable the switch on the configuration page to stop automatic operation.
 
 ## Applying a CombatAI update or patch
 
@@ -276,9 +287,13 @@ You normally do **not** need to uninstall CombatAI first.
 3. Select everything in that folder, copy it, and paste it into your existing CombatAI folder.
    Choose **Replace the files in the destination** when Windows asks. Do not delete the old
    folder first; this preserves the downloaded runtime and models.
-4. Open PowerShell in the existing CombatAI folder.
-5. Run `.\install.bat` again, using the same explicit path options as before if you needed them.
-6. Run the status command from step 4 of this guide and confirm that `healthy` is `true`.
+4. Open PowerShell in the existing CombatAI folder and run `.\run.bat`. CombatAI checks and,
+   when safe, updates the hook automatically. It prompts for administrator permission only when
+   a change is required.
+5. If DCS was open, restart DCS when CombatAI asks. A hook already loaded into a running DCS
+   process cannot be replaced in memory.
+6. For an advanced manual check, run the status command from step 4 of this guide and confirm
+   that `healthy` is `true`.
 
 The installer checks hashes before changing anything. If DCS, VAICOM, another mod, or a DCS
 update changed the radio-panel file after CombatAI was installed, the update is deliberately
@@ -320,6 +335,8 @@ improves the overall result without interfering with DCS.
 | The microphone test reports silence | Select a different recording device and check Windows **Settings > System > Sound > Input** and microphone privacy permissions. |
 | The HOTAS is not listed | Connect and power it before opening the configuration page, then restart `configuration.bat`. Use **Space only** as a fallback. |
 | CombatAI waits for DCS indefinitely | Enter an active mission, confirm the installation status is healthy, and make sure only one CombatAI runner is open. |
+| CombatAI says `Restart DCS` | The file on disk is current but the running DCS process loaded an older hook. Close DCS completely and start it again. |
+| CombatAI says `Repair required` | Run `install.bat` in PowerShell and preserve its complete output. CombatAI detected a missing, altered, or ambiguous installation that it will not overwrite automatically. |
 | DCS has no CombatAI catalogue | Check `Saved Games\DCS\Logs\dcs.log`. Advanced checks: DCS should own UDP port `34383`, and CombatAI should own `34384`. |
 | `Previous Menu` or `Exit Menu` is rejected as an ordinary command | Rerun `install.bat`; these controls require both the current Windows application and the current DCS hook. |
 | The installer refuses because the panel changed | Stop. Do not overwrite it manually. Preserve the full error/status output; the safety check is protecting a DCS update or another modification. |

@@ -16,6 +16,12 @@ do
     local cai_gui = cai_base.require("dxgui")
 
     local cai_protocol_version = 1
+    local cai_hook_version = 2
+    local cai_capabilities = {
+        "guided_selection",
+        "menu_control",
+        "staged_transactions",
+    }
     local cai_receive_port = 34383
     local cai_send_port = 34384
     local cai_max_datagram = 60000
@@ -233,6 +239,8 @@ do
                 type = "menu_snapshot",
                 revision = cai_state.revision,
                 items = cai_state.items,
+                hook_version = cai_hook_version,
+                capabilities = cai_capabilities,
             }) then
                 cai_send({
                     type = "status",
@@ -636,6 +644,8 @@ do
                 type = "status",
                 state = data and data.initialized and "mission_active" or "waiting_for_mission",
                 revision = cai_state.revision,
+                hook_version = cai_hook_version,
+                capabilities = cai_capabilities,
             })
         end
     end

@@ -40,7 +40,7 @@ class BootstrapTests(unittest.TestCase):
     def test_user_runner_launches_voice_control(self) -> None:
         runner = (ROOT / "run.bat").read_text(encoding="utf-8")
         diagnostic = (ROOT / "radio-menu-test.bat").read_text(encoding="utf-8")
-        self.assertIn("-m combatai.voice_command_test", runner)
+        self.assertIn("-m combatai.launcher", runner)
         self.assertIn("-m combatai", diagnostic)
         self.assertNotIn("voice_command_test", diagnostic)
 

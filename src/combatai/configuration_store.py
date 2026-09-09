@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-SCHEMA = 5
+SCHEMA = 6
 DEFAULT_MINIMUM_SCORE = 0.70
 DEFAULT_MINIMUM_LEAD = 0.10
 MINIMUM_SCORE_RANGE = (0.60, 0.95)
@@ -34,6 +34,7 @@ def default_document() -> dict[str, Any]:
         "audio": {"output_device": None},
         "ptt": {"mode": "keyboard"},
         "feedback": {"audio_cues": True, "cue_volume": 0.25},
+        "startup": {"start_with_windows": False},
     }
 
 
@@ -55,6 +56,7 @@ def load_document(path: Path | None = None) -> dict[str, Any]:
     document["ptt"] = _validated_ptt(raw.get("ptt"))
     document["feedback"] = _validated_feedback(raw.get("feedback"))
     document["audio"] = _validated_audio(raw.get("audio"))
+    document["startup"] = _validated_startup(raw.get("startup"))
     return document
 
 
@@ -80,6 +82,7 @@ def load_document_from_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
     result["ptt"] = _validated_ptt(value.get("ptt"))
     result["feedback"] = _validated_feedback(value.get("feedback"))
     result["audio"] = _validated_audio(value.get("audio"))
+    result["startup"] = _validated_startup(value.get("startup"))
     microphone = value.get("microphone")
     if microphone is not None and not isinstance(microphone, dict):
         raise ValueError("microphone must be an object")
@@ -97,6 +100,7 @@ def update_settings(
     microphone: Mapping[str, Any] | None,
     audio_cues: bool,
     cue_volume: float,
+    start_with_windows: bool,
 ) -> dict[str, Any]:
     updated = dict(document)
     updated["matching"] = {
@@ -106,6 +110,7 @@ def update_settings(
     updated["stt"] = {"model": model, "use_gpu": use_gpu}
     updated["audio"] = {"output_device": output_device}
     updated["feedback"] = {"audio_cues": audio_cues, "cue_volume": cue_volume}
+    updated["startup"] = {"start_with_windows": start_with_windows}
     if microphone is not None:
         updated["microphone"] = dict(microphone)
     return load_document_from_mapping(updated)
@@ -184,6 +189,14 @@ def _validated_feedback(value: object) -> dict[str, Any]:
         source.get("cue_volume", 0.25), "cue_volume", *CUE_VOLUME_RANGE
     )
     return {"audio_cues": enabled, "cue_volume": volume}
+
+
+def _validated_startup(value: object) -> dict[str, bool]:
+    source = value if isinstance(value, dict) else {}
+    enabled = source.get("start_with_windows", False)
+    if not isinstance(enabled, bool):
+        raise ValueError("startup.start_with_windows must be true or false")
+    return {"start_with_windows": enabled}
 
 
 def _bounded_float(value: object, name: str, lower: float, upper: float) -> float:

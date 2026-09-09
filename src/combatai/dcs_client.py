@@ -16,6 +16,9 @@ from typing import Any
 from .protocol import MenuSnapshot, ProtocolError, decode_message, encode_message
 
 LOG = logging.getLogger(__name__)
+REQUIRED_HOOK_CAPABILITIES = frozenset(
+    {"guided_selection", "menu_control", "staged_transactions"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +27,17 @@ class ActionResult:
     accepted: bool
     code: str
     detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class HookStatus:
+    version: int
+    capabilities: frozenset[str]
+    state: str | None = None
+
+    @property
+    def compatible(self) -> bool:
+        return REQUIRED_HOOK_CAPABILITIES <= self.capabilities
 
 
 class DcsMenuClient:
@@ -44,6 +58,7 @@ class DcsMenuClient:
         self._socket.bind((listen_host, listen_port))
         self._socket.settimeout(0.25)
         self.snapshot: MenuSnapshot | None = None
+        self.hook_status: HookStatus | None = None
         self.last_seen_monotonic: float | None = None
         self._results: dict[str, ActionResult] = {}
         self._pending: dict[str, bytes] = {}
@@ -167,7 +182,11 @@ class DcsMenuClient:
     def _consume(self, message: dict[str, Any]) -> None:
         message_type = message["type"]
         if message_type == "menu_snapshot":
+            self._consume_hook_status(message)
             self.snapshot = MenuSnapshot.from_message(message)
+            return
+        if message_type == "status":
+            self._consume_hook_status(message)
             return
         if message_type == "result":
             request_id = message.get("request_id")
@@ -183,6 +202,20 @@ class DcsMenuClient:
             if not isinstance(detail, str):
                 raise ProtocolError("result detail must be a string")
             self._results[request_id] = ActionResult(request_id, accepted, code, detail)
+
+    def _consume_hook_status(self, message: dict[str, Any]) -> None:
+        version = message.get("hook_version", 0)
+        capabilities = message.get("capabilities", [])
+        state = message.get("state")
+        if not isinstance(version, int) or isinstance(version, bool) or version < 0:
+            raise ProtocolError("hook_version must be a non-negative integer")
+        if not isinstance(capabilities, list) or any(
+            not isinstance(item, str) or not item for item in capabilities
+        ):
+            raise ProtocolError("capabilities must be a list of names")
+        if state is not None and not isinstance(state, str):
+            raise ProtocolError("status state must be a string")
+        self.hook_status = HookStatus(version, frozenset(capabilities), state)
 
     def _send(self, message_type: str, **fields: Any) -> bytes:
         payload = encode_message(message_type, **fields)

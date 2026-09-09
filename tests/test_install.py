@@ -11,6 +11,7 @@ from tools.install import (
     RELATIVE_PANEL,
     file_hash,
     install_hook,
+    installation_preflight,
     installation_status,
     purge_installation,
     uninstall_hook,
@@ -84,6 +85,28 @@ class InstallTests(unittest.TestCase):
         install_hook(self.dcs, self.saved, self.hook)
         result = install_hook(self.dcs, self.saved, self.hook)
         self.assertEqual(result["outcome"], "already_current")
+
+    def test_preflight_distinguishes_install_current_and_update(self) -> None:
+        self.assertEqual(
+            installation_preflight(self.dcs, self.saved, self.hook)["state"],
+            "install_required",
+        )
+        install_hook(self.dcs, self.saved, self.hook)
+        self.assertEqual(
+            installation_preflight(self.dcs, self.saved, self.hook)["state"],
+            "current",
+        )
+        self.hook.write_bytes(HOOK + b"-- revised hook\n")
+        self.assertEqual(
+            installation_preflight(self.dcs, self.saved, self.hook)["state"],
+            "update_required",
+        )
+
+    def test_preflight_requires_repair_for_changed_installed_panel(self) -> None:
+        install_hook(self.dcs, self.saved, self.hook)
+        self.core.write_bytes(self.core.read_bytes() + b"-- external change\n")
+        result = installation_preflight(self.dcs, self.saved, self.hook)
+        self.assertEqual(result["state"], "repair_required")
 
     def test_installed_hook_can_be_updated_without_replacing_original_backup(self) -> None:
         first = install_hook(self.dcs, self.saved, self.hook)

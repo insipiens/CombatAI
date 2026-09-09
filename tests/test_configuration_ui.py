@@ -21,6 +21,8 @@ class ConfigurationUiTests(unittest.TestCase):
             "Test Alan voice",
             "Recent activity",
             "Audio feedback",
+            "Automatic startup",
+            "Start CombatAI with Windows",
             "Test accepted cue",
             "__TOKEN__",
         ):

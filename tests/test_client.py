@@ -5,10 +5,38 @@ import socket
 import threading
 import unittest
 
-from combatai.dcs_client import DcsMenuClient
+from combatai.dcs_client import DcsMenuClient, REQUIRED_HOOK_CAPABILITIES
 
 
 class ClientTests(unittest.TestCase):
+    def test_snapshot_records_compatible_hook_capabilities(self) -> None:
+        client = DcsMenuClient(listen_port=0)
+        try:
+            client._consume(
+                {
+                    "v": 1,
+                    "type": "menu_snapshot",
+                    "revision": 1,
+                    "items": [],
+                    "hook_version": 2,
+                    "capabilities": sorted(REQUIRED_HOOK_CAPABILITIES),
+                }
+            )
+            self.assertIsNotNone(client.hook_status)
+            assert client.hook_status is not None
+            self.assertTrue(client.hook_status.compatible)
+        finally:
+            client.close()
+
+    def test_legacy_snapshot_is_explicitly_incompatible(self) -> None:
+        client = DcsMenuClient(listen_port=0)
+        try:
+            client._consume({"v": 1, "type": "menu_snapshot", "revision": 1, "items": []})
+            self.assertIsNotNone(client.hook_status)
+            assert client.hook_status is not None
+            self.assertFalse(client.hook_status.compatible)
+        finally:
+            client.close()
     def test_windows_udp_reset_is_treated_as_no_message(self) -> None:
         class ResetSocket:
             def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:

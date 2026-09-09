@@ -288,6 +288,7 @@ class MatcherTests(unittest.TestCase):
         class WaitingClient:
             def __init__(self) -> None:
                 self.calls = 0
+                self.hook_status = type("HookStatus", (), {"compatible": True})()
 
             def request_menu_and_wait(self, timeout: float) -> object | None:
                 self.calls += 1
@@ -297,6 +298,16 @@ class MatcherTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             wait_for_catalogue(client)  # type: ignore[arg-type]
         self.assertEqual(client.calls, 3)
+
+    def test_startup_rejects_a_loaded_legacy_hook(self) -> None:
+        class LegacyClient:
+            hook_status = type("HookStatus", (), {"compatible": False})()
+
+            def request_menu_and_wait(self, timeout: float) -> object:
+                return object()
+
+        with self.assertRaisesRegex(OSError, "older CombatAI hook"):
+            wait_for_catalogue(LegacyClient())  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":

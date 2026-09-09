@@ -22,7 +22,7 @@ class ConfigurationStoreTests(unittest.TestCase):
                 encoding="utf-8",
             )
             document = load_document(path)
-        self.assertEqual(document["schema"], 5)
+        self.assertEqual(document["schema"], 6)
         self.assertEqual(document["microphone"]["name"], "VR")
         self.assertEqual(document["matching"]["minimum_score"], DEFAULT_MINIMUM_SCORE)
         self.assertEqual(document["matching"]["minimum_lead"], DEFAULT_MINIMUM_LEAD)
@@ -30,6 +30,7 @@ class ConfigurationStoreTests(unittest.TestCase):
         self.assertEqual(document["feedback"], {"audio_cues": True, "cue_volume": 0.25})
         self.assertEqual(document["stt"]["use_gpu"], False)
         self.assertEqual(document["audio"], {"output_device": None})
+        self.assertEqual(document["startup"], {"start_with_windows": False})
 
     def test_audio_and_hotas_settings_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

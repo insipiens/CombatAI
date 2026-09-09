@@ -255,6 +255,18 @@ def purge_installation(
 
     if active_target.is_file() and BEGIN_MARKER in active_target.read_bytes():
         cleanup_errors.append(f"the CombatAI hook remains in {active_target}")
+    if os.name == "nt":
+        try:
+            import winreg
+
+            run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, run_key) as key:
+                try:
+                    winreg.DeleteValue(key, "CombatAI")
+                except FileNotFoundError:
+                    pass
+        except OSError as exc:
+            cleanup_errors.append(f"could not remove Start with Windows registration: {exc}")
     if cleanup_errors:
         raise InstallError("cleanup incomplete:\n  " + "\n  ".join(cleanup_errors))
 
@@ -292,6 +304,64 @@ def installation_status(dcs_install: Path, saved_games: Path) -> dict[str, Any]:
         "installed_at": manifest["installed_at"],
         "expected_sha256": manifest["installed_sha256"],
         "actual_sha256": actual_hash,
+    }
+
+
+def installation_preflight(
+    dcs_install: Path, saved_games: Path, hook: Path
+) -> dict[str, Any]:
+    """Classify installation health without modifying DCS or requiring elevation."""
+
+    dcs_install = dcs_install.resolve()
+    saved_games = saved_games.resolve()
+    hook = hook.resolve()
+    target = dcs_install / RELATIVE_PANEL
+    manifest_path = saved_games / STATE_DIRECTORY / MANIFEST_NAME
+    if not target.is_file():
+        return {"state": "repair_required", "detail": f"DCS radio-panel file is missing: {target}"}
+    if not hook.is_file() or BEGIN_MARKER not in hook.read_bytes():
+        return {"state": "repair_required", "detail": f"CombatAI hook is missing or invalid: {hook}"}
+    if not manifest_path.is_file():
+        if BEGIN_MARKER in target.read_bytes():
+            return {
+                "state": "repair_required",
+                "detail": "The DCS panel contains CombatAI but its installation record is missing.",
+            }
+        return {"state": "install_required", "target": str(target)}
+
+    try:
+        manifest = _read_manifest(manifest_path)
+        status = installation_status(dcs_install, saved_games)
+        if not status.get("healthy"):
+            return {
+                "state": "repair_required",
+                "detail": "The installed DCS hook or its installation record has changed.",
+                "status": status,
+            }
+        backup = Path(manifest["backup"])
+        _validate_backup_location(backup, saved_games / STATE_DIRECTORY)
+        if not backup.is_file() or file_hash(backup) != manifest["base_sha256"]:
+            return {
+                "state": "repair_required",
+                "detail": f"The verified DCS panel backup is missing or altered: {backup}",
+            }
+        with tempfile.TemporaryDirectory(prefix="CombatAI-preflight-") as directory:
+            candidate = Path(directory) / "RadioCommandDialogsPanel.lua"
+            base_sha256 = build_overlay(backup, hook, candidate)
+            if base_sha256 != manifest["base_sha256"]:
+                return {
+                    "state": "repair_required",
+                    "detail": "The DCS panel backup no longer matches its installation record.",
+                }
+            expected_sha256 = file_hash(candidate)
+    except (InstallError, OSError, ValueError) as exc:
+        return {"state": "repair_required", "detail": str(exc)}
+
+    return {
+        "state": "current" if expected_sha256 == manifest["installed_sha256"] else "update_required",
+        "target": str(target),
+        "installed_sha256": manifest["installed_sha256"],
+        "expected_sha256": expected_sha256,
     }
 
 
@@ -610,10 +680,16 @@ def main() -> int:
     install_parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
     install_parser.add_argument("--result-file", type=Path, help=argparse.SUPPRESS)
 
-    for name in ("status", "uninstall"):
+    for name in ("preflight", "status", "uninstall"):
         command_parser = commands.add_parser(name)
         command_parser.add_argument("--dcs-install", type=Path)
         command_parser.add_argument("--saved-games", type=Path)
+        if name == "preflight":
+            command_parser.add_argument(
+                "--hook",
+                type=Path,
+                default=Path(__file__).resolve().parents[1] / "dcs" / "CombatAI.radio_hook.lua",
+            )
         if name == "uninstall":
             command_parser.add_argument(
                 "--purge",
@@ -635,6 +711,8 @@ def main() -> int:
         dcs_install = discover_dcs_install(args.dcs_install)
         if args.command == "install":
             result = install_hook(dcs_install, saved_games, args.hook)
+        elif args.command == "preflight":
+            result = installation_preflight(dcs_install, saved_games, args.hook)
         elif args.command == "uninstall":
             if args.purge:
                 local_root = os.environ.get("LOCALAPPDATA")

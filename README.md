@@ -70,7 +70,11 @@ Only the requested model is downloaded. Installed models appear in the configura
 
 ## Install the DCS hook
 
-Close DCS before changing its radio-panel file, then run:
+`run.bat` now checks the hook before starting voice control. If installation or an update is
+needed, it requests administrator permission and performs the guarded installation
+automatically. When the hook is already current, there is no UAC prompt.
+
+For an initial installation, or when supplying nonstandard paths explicitly, close DCS and run:
 
 ```powershell
 .\install.bat
@@ -81,7 +85,8 @@ finds standard standalone and Steam locations, backs up the exact active radio-p
 under `Saved Games\DCS\Scripts\CombatAI\backups`, appends the CombatAI hook atomically,
 and records hashes in `Scripts\CombatAI\install.json`.
 
-After replacing the CombatAI source files with a newer patch, run `install.bat` again. If the
+After replacing the CombatAI source files with a newer patch, `run.bat` performs the same check
+and update. If the
 installed panel and its original backup still match the recorded hashes, the installer updates
 only the CombatAI overlay in place and preserves the original backup for uninstall. It refuses
 the update if DCS, VAICOM, or another modification changed the installed panel meanwhile.
@@ -128,7 +133,8 @@ Open the local configuration page:
 
 The page is served only on `127.0.0.1:34385`. It configures and tests the microphone,
 microphone input and speech/cue output together, plus the installed Whisper model, matching
-thresholds, and HOTAS PTT binding. GPU recognition becomes available only after the pinned CUDA 12 worker is installed. It is
+thresholds, HOTAS PTT binding, and the optional **Start CombatAI with Windows** controller.
+GPU recognition becomes available only after the pinned CUDA 12 worker is installed. It is
 experimental so its latency and DCS resource impact can be measured on the target machine;
 CPU remains the default.
 
@@ -138,7 +144,7 @@ mode, audio duration, inference time, real-time factor, model-load time, transcr
 candidates, best and runner-up scores, acceptance or rejection, and DCS acknowledgement.
 Captured audio is neither logged nor retained.
 
-Start CombatAI before entering a DCS mission:
+For manual operation, start CombatAI before or after starting DCS:
 
 ```powershell
 .\run.bat
@@ -148,6 +154,13 @@ Hold Space or the configured HOTAS button, speak, and release. A command is sent
 only when it clears both configured matching gates. PTT stops active SDL playback, terminates
 Piper if synthesis is still running, discards that response, and starts microphone capture.
 Alan uses the Piper voice model's native synthesis settings.
+
+When **Start CombatAI with Windows** is enabled, a small controller waits in the background.
+It starts the voice worker only after DCS and an active mission are detected, so Whisper,
+Piper, microphone capture, SDL, and optional CUDA resources remain unloaded at other times.
+It stops the worker again when DCS exits. Controller states are recorded as **Waiting for
+DCS**, **Loading**, **Ready**, **Restart DCS**, or **Repair required**. Only one controller can
+run at a time.
 
 CombatAI matches the live Wingman, Flight, Second Element, ATC, Ground Crew, and mission/F10
 branches. A unique exact path is not rejected merely because another location offers the same
