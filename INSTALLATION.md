@@ -33,8 +33,12 @@ Launch DCS at least once before installing DCS Radio Voice Control. This creates
 1. Download the DCS Radio Voice Control ZIP supplied for the version you want to install.
 2. Open your Downloads folder in File Explorer.
 3. Right-click the ZIP and select **Extract All**.
-4. Choose a permanent, easy-to-find location, such as `C:\DCS-Radio-Voice-Control`.
-5. Open the extracted folder and check that it contains `install.bat`, `configuration.bat`,
+4. Extract it into your Windows user folder. The final folder should be named
+   `DCS-Radio-Voice-Control`; for example,
+   `C:\Users\your-name\DCS-Radio-Voice-Control`.
+5. If the ZIP created a longer folder name, rename that folder to
+   `DCS-Radio-Voice-Control`.
+6. Open the extracted folder and check that it contains `install.bat`, `configuration.bat`,
    and `run.bat`.
 
 Do not run DCS Radio Voice Control from inside the ZIP preview. Do not put it in `Program Files`. Keep the
@@ -57,7 +61,7 @@ A blue or black PowerShell window will open. Its prompt should end with the name
 DCS Radio Voice Control folder, for example:
 
 ```text
-PS C:\DCS-Radio-Voice-Control>
+PS C:\Users\your-name\DCS-Radio-Voice-Control>
 ```
 
 Leave this window open for the following commands. You can paste a command into PowerShell
