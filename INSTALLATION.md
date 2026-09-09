@@ -286,6 +286,15 @@ example:
 Reviewed mappings are loaded automatically. Their targets must exactly identify one current
 DCS command; an invalid or ambiguous mapping is rejected rather than fuzzily reinterpreted.
 
+On the experimental recipient-alias branch, direct commands may begin with `Two`, `Number Two`,
+or `2` for Wingman, and `Element` or `Three and Four` for Second Element. The recipient prefix
+only selects the live subtree. The remaining command phrase must independently pass the normal
+matching score and lead requirements; the alias does not add confidence.
+
+For field comparison, each `transcription_completed` record in `events.jsonl` includes an `stt.acoustic`
+object containing the raw whisper.cpp token-probability, average-log-probability, and no-speech
+summaries when available. These diagnostic values are logged but are not execution gates.
+
 DCS Radio Voice Control sends a command only when the recognition result passes both configured safety gates.
 An accepted response confirms that DCS ran the menu action; a mission script can still decide
 what gameplay effect follows.

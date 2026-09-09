@@ -32,9 +32,11 @@ from .hotas import HotasButton, SdlHotasInput, resolve_binding
 from .matcher import (
     MatchResult,
     RankedMatch,
+    RecipientScope,
     build_vocabulary_prompt,
     match_catalogue,
     match_reviewed_alias,
+    recipient_scope,
     strong_semantic_match,
 )
 from .matching_test import _print_result
@@ -55,6 +57,16 @@ MINIMUM_EXECUTION_SCORE = 0.70
 MINIMUM_EXECUTION_LEAD = 0.10
 MINIMUM_ALIAS_CANDIDATE_SCORE = 0.50
 _SHORT_CAPTURE_ERROR = "No usable audio was captured;"
+
+
+def action_alias_for_transcript(
+    transcript: str,
+) -> tuple[RecipientScope | None, str | None]:
+    """Keep scoped recipient aliases on the ordinary scored matching path."""
+    recipient = recipient_scope(transcript)
+    if recipient is not None and recipient.alias is not None:
+        return recipient, None
+    return recipient, reviewed_alias(transcript)
 
 
 def execution_candidate(
@@ -353,6 +365,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 print(f"\nHeard: {transcript}")
                 print(f"Transcription time: {elapsed:.2f} seconds")
+                write_event(
+                    "transcription_completed",
+                    transcript=transcript,
+                    duration_seconds=round(duration, 3),
+                    average_dbfs=round(dbfs, 2) if dbfs is not None else None,
+                    transcription_seconds=round(elapsed, 3),
+                    stt=stt_metrics,
+                )
 
                 # The menu can change while the pilot is speaking.  Refresh
                 # immediately before interpretation instead of matching a
@@ -658,7 +678,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         visible_menu_path = target.path
                     continue
 
-                action_alias = reviewed_alias(transcript)
+                recipient, action_alias = action_alias_for_transcript(transcript)
+                if recipient is not None and recipient.alias is not None:
+                    # Scoped recipient aliases must retain the ordinary command
+                    # score; a legacy whole-command alias must not bypass it.
+                    action_alias = None
+                    write_event(
+                        "recipient_scope_applied",
+                        transcript=transcript,
+                        alias=recipient.alias,
+                        scope=recipient.scope,
+                        command=recipient.command,
+                        revision=snapshot.revision,
+                    )
                 if action_alias is not None:
                     write_event(
                         "alias_applied",

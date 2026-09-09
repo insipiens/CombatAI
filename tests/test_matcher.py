@@ -4,6 +4,7 @@ from contextlib import redirect_stdout
 import io
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from dcs_radio_voice_control.matcher import (
     MatchResult,
@@ -13,6 +14,7 @@ from dcs_radio_voice_control.matcher import (
     match_catalogue,
     match_reviewed_alias,
     normalize_phrase,
+    recipient_scope,
     strong_semantic_match,
 )
 from dcs_radio_voice_control.dcs_client import ActionResult
@@ -20,6 +22,7 @@ from dcs_radio_voice_control.protocol import MenuItem, MenuSnapshot
 from dcs_radio_voice_control.voice_command_test import (
     MINIMUM_EXECUTION_SCORE,
     MINIMUM_EXECUTION_LEAD,
+    action_alias_for_transcript,
     contextual_catalogue,
     control_live_menu,
     execution_candidate,
@@ -69,6 +72,45 @@ class MatcherTests(unittest.TestCase):
         result = match_catalogue("Please tell the wingman to break right", ITEMS)
         self.assertEqual(result.status, "matched")
         self.assertEqual(result.best.item.action_id, "radio.1.4.1")  # type: ignore[union-attr]
+
+    def test_number_two_alias_scopes_but_does_not_score_the_action(self) -> None:
+        scope = recipient_scope("Two, great left")
+        self.assertEqual(scope.scope, "wingman")  # type: ignore[union-attr]
+        self.assertEqual(scope.command, "great left")  # type: ignore[union-attr]
+        self.assertEqual(scope.alias, "two")  # type: ignore[union-attr]
+        result = match_catalogue("Two, great left", ITEMS)
+        wingman_items = tuple(item for item in ITEMS if item.path[0] == "Wingman")
+        unscoped_score = match_catalogue("great left", wingman_items).best.score  # type: ignore[union-attr]
+        self.assertEqual(result.best.item.action_id, "radio.1.4.2")  # type: ignore[union-attr]
+        self.assertEqual(result.best.score, unscoped_score)  # type: ignore[union-attr]
+
+    def test_numeric_two_alias_is_equivalent_to_number_two(self) -> None:
+        result = match_catalogue("2 break right", ITEMS)
+        self.assertEqual(result.best.item.action_id, "radio.1.4.1")  # type: ignore[union-attr]
+
+    def test_element_alias_scopes_second_element(self) -> None:
+        result = match_catalogue("Element break left", ITEMS)
+        self.assertEqual(result.best.item.action_id, "radio.3.4.2")  # type: ignore[union-attr]
+
+    def test_three_and_four_alias_scopes_second_element(self) -> None:
+        result = match_catalogue("Three and four, break left", ITEMS)
+        self.assertEqual(result.best.item.action_id, "radio.3.4.2")  # type: ignore[union-attr]
+
+    def test_recipient_alias_alone_cannot_nominate_an_action(self) -> None:
+        self.assertEqual(match_catalogue("Two", ITEMS).status, "no_match")
+
+    def test_homophones_are_not_recipient_aliases(self) -> None:
+        self.assertIsNone(recipient_scope("to break left"))
+        self.assertIsNone(recipient_scope("too break left"))
+
+    def test_scoped_alias_cannot_use_a_legacy_whole_command_override(self) -> None:
+        with patch(
+            "dcs_radio_voice_control.voice_command_test.reviewed_alias",
+            return_value="Wingman > Maneuvers > Break Left",
+        ):
+            recipient, target = action_alias_for_transcript("Two, great left")
+        self.assertEqual(recipient.scope, "wingman")  # type: ignore[union-attr]
+        self.assertIsNone(target)
 
     def test_leaf_without_recipient_is_ambiguous(self) -> None:
         result = match_catalogue("Break left", ITEMS)

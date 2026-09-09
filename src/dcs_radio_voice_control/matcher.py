@@ -17,6 +17,14 @@ _SCOPES = ("second element", "wingman", "flight", "atc")
 _LEADING_POLITENESS = {"please"}
 _RECIPIENT_VERBS = {"ask", "order", "tell"}
 _RECIPIENT_ARTICLES = {"my", "the"}
+_RECIPIENT_CONNECTORS = {"to"}
+_RECIPIENT_ALIASES = (
+    (("three", "and", "four"), "second element"),
+    (("number", "two"), "wingman"),
+    (("element",), "second element"),
+    (("two",), "wingman"),
+    (("2",), "wingman"),
+)
 _EXCLUSIVE_TERMS = (
     frozenset({"start", "stop"}),
     frozenset({"on", "off"}),
@@ -44,6 +52,13 @@ class MatchResult:
     @property
     def best(self) -> RankedMatch | None:
         return self.candidates[0] if self.candidates else None
+
+
+@dataclass(frozen=True, slots=True)
+class RecipientScope:
+    scope: str
+    command: str
+    alias: str | None = None
 
 
 def normalize_phrase(value: str) -> str:
@@ -123,7 +138,11 @@ def match_catalogue(
     if not spoken or not items:
         return MatchResult("no_match", ())
 
-    scope = _explicit_scope(spoken)
+    recipient = recipient_scope(spoken)
+    scope = recipient.scope if recipient is not None else None
+    command = recipient.command if recipient is not None else spoken
+    if not command:
+        return MatchResult("no_match", ())
     all_ranked: list[RankedMatch] = []
     for item in items:
         item_scope = normalize_phrase(item.path[0])
@@ -131,11 +150,11 @@ def match_catalogue(
             continue
         forms = _spoken_forms(item)
         score = max(
-            _similarity(spoken, form, contextual=contextual)
+            _similarity(command, form, contextual=contextual)
             for form, contextual in forms
         )
-        score = max(score, _hierarchical_similarity(spoken, item))
-        exact = any(spoken == form for form, _ in forms)
+        score = max(score, _hierarchical_similarity(command, item))
+        exact = any(command == form for form, _ in forms)
         all_ranked.append(RankedMatch(item, score, exact=exact))
 
     all_ranked.sort(key=lambda match: (-match.score, match.item.action_id))
@@ -261,7 +280,13 @@ def _is_subsequence(needle: list[str], haystack: list[str]) -> bool:
     return position == len(needle)
 
 
-def _explicit_scope(spoken: str) -> str | None:
+def recipient_scope(transcript: str) -> RecipientScope | None:
+    """Split an exact leading recipient from the command it constrains.
+
+    Recipient aliases select a catalogue subtree only.  They are removed before
+    scoring, so they cannot contribute similarity evidence for the action.
+    """
+    spoken = normalize_phrase(transcript)
     words = spoken.split()
     while words and words[0] in _LEADING_POLITENESS:
         words.pop(0)
@@ -269,8 +294,19 @@ def _explicit_scope(spoken: str) -> str | None:
         words.pop(0)
         if words and words[0] in _RECIPIENT_ARTICLES:
             words.pop(0)
+    for alias_words, scope in _RECIPIENT_ALIASES:
+        if tuple(words[: len(alias_words)]) != alias_words:
+            continue
+        remainder = words[len(alias_words) :]
+        while remainder and remainder[0] in _RECIPIENT_CONNECTORS:
+            remainder.pop(0)
+        return RecipientScope(scope, " ".join(remainder), " ".join(alias_words))
+
     prefix = " ".join(words)
     for scope in _SCOPES:
         if prefix == scope or prefix.startswith(scope + " "):
-            return scope
+            remainder = words[len(scope.split()) :]
+            while remainder and remainder[0] in _RECIPIENT_CONNECTORS:
+                remainder.pop(0)
+            return RecipientScope(scope, " ".join(remainder))
     return None

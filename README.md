@@ -199,9 +199,21 @@ submenu navigation, F11/F12 controls, and repeat cannot fall through to unrelate
 closes the radio menu. `Repeat` only says Alan's last spoken response again and never repeats an
 executed DCS action.
 
+This experimental branch also accepts short recipient prefixes for direct commands:
+
+- `Two`, `Number Two`, or `2` means `Wingman`.
+- `Element` or `Three and Four` means `Second Element`.
+
+The prefix only limits matching to that recipient's live command tree. It is removed before the
+remaining words are scored, so `Two, rejoin` still requires `rejoin` itself to pass the configured
+match and lead gates. `Two` alone does nothing, and `to`/`too` are not aliases.
+
 Rejected action and application phrases are recorded separately under
 `%LOCALAPPDATA%\DCSRadioVoiceControl`. Replacing a candidate's `null` value with an exact unique
 command path activates that reviewed alias; configured targets are never fuzzily reinterpreted.
+The JSONL event log also records raw whisper.cpp diagnostics for every transcription: token
+probability summaries, average log probability, and no-speech probability. These are comparison
+data only and do not currently approve or reject a command.
 
 ## Developer diagnostics
 
