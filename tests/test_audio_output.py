@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from combatai.audio_output import AudioOutput
+from dcs_radio_voice_control.audio_output import AudioOutput
 
 
 class FakeSound:

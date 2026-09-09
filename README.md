@@ -1,8 +1,8 @@
-# CombatAI
+# DCS Radio Voice Control
 
-CombatAI is a local, deterministic voice-control layer for DCS World. It lets a pilot hold a
-HOTAS push-to-talk button, speak a command from the live DCS radio catalogue, and execute it
-only when the match clears explicit safety thresholds.
+DCS Radio Voice Control is a local, deterministic voice-control layer for DCS World. It lets a
+pilot hold a HOTAS push-to-talk button, speak a command from the live DCS radio catalogue,
+and execute it only when the match clears explicit safety thresholds.
 
 The working path is:
 
@@ -14,9 +14,13 @@ HOTAS PTT -> microphone PCM -> local whisper.cpp -> deterministic matcher
 No cloud service or generative command interpretation is used. Audio stays on the machine,
 and the live path does not write captured speech or synthesized responses to temporary files.
 
+> **Renaming from CombatAI:** this version is a clean break. Before installing it, close DCS
+> and run `uninstall.bat` from the former CombatAI folder. The new installer deliberately
+> refuses to load alongside the old hook.
+
 ## Current behaviour
 
-CombatAI currently provides:
+DCS Radio Voice Control currently provides:
 
 - live command discovery from DCS over localhost UDP;
 - standard radio and mission-generated commands from the active menu;
@@ -82,13 +86,13 @@ For an initial installation, or when supplying nonstandard paths explicitly, clo
 
 The installer requests administrator permission only for the DCS installation directory. It
 finds standard standalone and Steam locations, backs up the exact active radio-panel file
-under `Saved Games\DCS\Scripts\CombatAI\backups`, appends the CombatAI hook atomically,
-and records hashes in `Scripts\CombatAI\install.json`.
+under `Saved Games\DCS\Scripts\DCSRadioVoiceControl\backups`, appends the DCS Radio Voice Control hook atomically,
+and records hashes in `Scripts\DCSRadioVoiceControl\install.json`.
 
-After replacing the CombatAI source files with a newer patch, `run.bat` performs the same check
+After replacing the DCS Radio Voice Control source files with a newer patch, `run.bat` performs the same check
 and update. If the
 installed panel and its original backup still match the recorded hashes, the installer updates
-only the CombatAI overlay in place and preserves the original backup for uninstall. It refuses
+only the DCS Radio Voice Control overlay in place and preserves the original backup for uninstall. It refuses
 the update if DCS, VAICOM, or another modification changed the installed panel meanwhile.
 
 If discovery finds no installation or more than one, provide both paths:
@@ -99,28 +103,28 @@ If discovery finds no installation or more than one, provide both paths:
   --saved-games "$env:USERPROFILE\Saved Games\DCS"
 ```
 
-CombatAI refuses an ambiguous installation or an unrecognised existing modification. Check
+DCS Radio Voice Control refuses an ambiguous installation or an unrecognised existing modification. Check
 the installed state with:
 
 ```powershell
 .\runtime\python.exe tools\install.py status
 ```
 
-To remove CombatAI completely:
+To remove DCS Radio Voice Control completely:
 
 ```powershell
 .\uninstall.bat
 ```
 
 The uninstaller restores the exact DCS file backed up during installation, then removes
-CombatAI's Saved Games state, local settings and logs, private runtime, Whisper workers and
+DCS Radio Voice Control's Saved Games state, local settings and logs, private runtime, Whisper workers and
 models, Piper files, and setup remnants. It verifies the cleanup and returns an error if any
 managed artifact remains. The downloaded source folder is retained so the uninstaller can
 finish reliably and because it may be a Git checkout; delete that folder manually afterward
 if it was an extracted download.
 
-Removal is refused if the active DCS file changed after installation or if a CombatAI hook
-exists without a usable manifest. This prevents CombatAI from overwriting a DCS update,
+Removal is refused if the active DCS file changed after installation or if a DCS Radio Voice Control hook
+exists without a usable manifest. This prevents DCS Radio Voice Control from overwriting a DCS update,
 VAICOM, or another modification.
 
 ## Configure and run
@@ -133,18 +137,18 @@ Open the local configuration page:
 
 The page is served only on `127.0.0.1:34385`. It configures and tests the microphone,
 microphone input and speech/cue output together, plus the installed Whisper model, matching
-thresholds, HOTAS PTT binding, and the optional **Start CombatAI with Windows** controller.
+thresholds, HOTAS PTT binding, and the optional **Start DCS Radio Voice Control with Windows** controller.
 GPU recognition becomes available only after the pinned CUDA 12 worker is installed. It is
 experimental so its latency and DCS resource impact can be measured on the target machine;
 CPU remains the default.
 
-Settings are stored in `%LOCALAPPDATA%\CombatAI\config.json`. Logs are stored beneath
-`%LOCALAPPDATA%\CombatAI\logs`. JSONL recognition events include the model, CPU/GPU
+Settings are stored in `%LOCALAPPDATA%\DCSRadioVoiceControl\config.json`. Logs are stored beneath
+`%LOCALAPPDATA%\DCSRadioVoiceControl\logs`. JSONL recognition events include the model, CPU/GPU
 mode, audio duration, inference time, real-time factor, model-load time, transcript, ranked
 candidates, best and runner-up scores, acceptance or rejection, and DCS acknowledgement.
 Captured audio is neither logged nor retained.
 
-For manual operation, start CombatAI before or after starting DCS:
+For manual operation, start DCS Radio Voice Control before or after starting DCS:
 
 ```powershell
 .\run.bat
@@ -155,14 +159,14 @@ only when it clears both configured matching gates. PTT stops active SDL playbac
 Piper if synthesis is still running, discards that response, and starts microphone capture.
 Alan uses the Piper voice model's native synthesis settings.
 
-When **Start CombatAI with Windows** is enabled, a small controller waits in the background.
+When **Start DCS Radio Voice Control with Windows** is enabled, a small controller waits in the background.
 It starts the voice worker only after DCS and an active mission are detected, so Whisper,
 Piper, microphone capture, SDL, and optional CUDA resources remain unloaded at other times.
 It stops the worker again when DCS exits. Controller states are recorded as **Waiting for
 DCS**, **Loading**, **Ready**, **Restart DCS**, or **Repair required**. Only one controller can
 run at a time.
 
-CombatAI matches the live Wingman, Flight, Second Element, ATC, Ground Crew, and mission/F10
+DCS Radio Voice Control matches the live Wingman, Flight, Second Element, ATC, Ground Crew, and mission/F10
 branches. A unique exact path is not rejected merely because another location offers the same
 leaf command. Operational qualifiers such as start/stop and left/right must agree, and a command
 remembered from an earlier menu revision is described as unavailable rather than executed.
@@ -181,7 +185,7 @@ Repeat
 ```
 
 `List` speaks the immediate choices without changing the DCS display. `Show` starts guided menu
-mode. CombatAI keeps the DCS menu visible, and every following phrase is allowed to select only
+mode. DCS Radio Voice Control keeps the DCS menu visible, and every following phrase is allowed to select only
 an item on that displayed menu. Submenus advance one level; a leaf executes and ends guided mode.
 For example: `Show ATC` opens the DCS F5 ATC menu, `Show Biggin Hill` selects that displayed
 submenu, and `Request Start-Up` executes the displayed command. A familiar complete command such
@@ -204,11 +208,11 @@ These test utilities are not part of normal installation or everyday use:
 .\radio-menu-test.bat
 ```
 
-Only one Windows process can own CombatAI's UDP listener. Close `run.bat` before starting a
+Only one Windows process can own DCS Radio Voice Control's UDP listener. Close `run.bat` before starting a
 radio-menu or matching diagnostic.
 
 If no catalogue arrives, confirm that a mission is active, check installer status, verify
-that DCS owns UDP port `34383` and CombatAI owns `34384`, then inspect
+that DCS owns UDP port `34383` and DCS Radio Voice Control owns `34384`, then inspect
 `Saved Games\DCS\Logs\dcs.log`.
 
 The repository does not distribute Eagle Dynamics' Lua implementation. The installed panel

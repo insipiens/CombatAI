@@ -5,8 +5,8 @@ import io
 from unittest import mock
 import unittest
 
-from combatai.console import _run
-from combatai.protocol import MenuItem, MenuSnapshot
+from dcs_radio_voice_control.console import _run
+from dcs_radio_voice_control.protocol import MenuItem, MenuSnapshot
 
 
 class _DisplayOnlyClient:

@@ -5,7 +5,7 @@ import re
 import unittest
 
 
-HOOK = Path(__file__).parents[1] / "dcs" / "CombatAI.radio_hook.lua"
+HOOK = Path(__file__).parents[1] / "dcs" / "DCSRadioVoiceControl.radio_hook.lua"
 
 
 class RadioHookTests(unittest.TestCase):
@@ -14,15 +14,15 @@ class RadioHookTests(unittest.TestCase):
         cls.source = HOOK.read_text(encoding="utf-8")
 
     def test_reads_dynamic_root_and_limits_top_level_scope(self) -> None:
-        self.assertIn("cai_submenu(data.rootItem)", self.source)
+        self.assertIn("drvc_submenu(data.rootItem)", self.source)
         self.assertRegex(
             self.source,
             r"local included_slots = \{1, 2, 3, 5, 8, 10\}",
         )
 
     def test_sparse_menu_slots_are_sorted_before_traversal(self) -> None:
-        self.assertIn("cai_numeric_keys(menu.items)", self.source)
-        self.assertIn("cai_base.table.sort(keys)", self.source)
+        self.assertIn("drvc_numeric_keys(menu.items)", self.source)
+        self.assertIn("drvc_base.table.sort(keys)", self.source)
         self.assertNotIn("for index = 1, #menu.items do", self.source)
 
     def test_only_f10_action_indexes_use_mission_action_execution(self) -> None:
@@ -56,12 +56,12 @@ class RadioHookTests(unittest.TestCase):
         self.assertIn('message.type ~= "execute"', self.source)
         self.assertIn('message.type ~= "open_menu"', self.source)
         self.assertIn('message.type ~= "menu_control"', self.source)
-        self.assertIn('local menu = cai_state.menus[message.menu_id]', self.source)
+        self.assertIn('local menu = drvc_state.menus[message.menu_id]', self.source)
         self.assertIn('"menu_opened"', self.source)
         self.assertIn("setShowMenu(true)", self.source)
-        capture = self.source.index("cai_capture_menu(false)", self.source.index('message.type ~= "execute"'))
-        validation = self.source.index("message.revision ~= cai_state.revision")
-        lookup = self.source.index("cai_state.menus[message.menu_id]")
+        capture = self.source.index("drvc_capture_menu(false)", self.source.index('message.type ~= "execute"'))
+        validation = self.source.index("message.revision ~= drvc_state.revision")
+        lookup = self.source.index("drvc_state.menus[message.menu_id]")
         self.assertLess(capture, validation)
         self.assertLess(validation, lookup)
 
@@ -70,12 +70,12 @@ class RadioHookTests(unittest.TestCase):
         self.assertIn('message.type == "select_visible"', self.source)
         self.assertIn('"guided_menu_not_active"', self.source)
         self.assertIn('"not_visible"', self.source)
-        self.assertIn("cai_same_indexes(parent_indexes, cai_state.guided_indexes)", self.source)
+        self.assertIn("drvc_same_indexes(parent_indexes, drvc_state.guided_indexes)", self.source)
         self.assertIn("commandDialogsPanel.selectMenuItem(self, index)", self.source)
 
     def test_guided_selection_never_replays_the_absolute_path(self) -> None:
         block = re.search(
-            r"local function cai_select_visible.*?\n    end\n\n    local function cai_process",
+            r"local function drvc_select_visible.*?\n    end\n\n    local function drvc_process",
             self.source,
             re.DOTALL,
         )
@@ -94,16 +94,16 @@ class RadioHookTests(unittest.TestCase):
         self.assertIn('"menu_closed"', self.source)
 
     def test_catalogue_is_recaptured_before_revision_validation(self) -> None:
-        capture = self.source.index("cai_capture_menu(false)", self.source.index('message.type ~= "execute"'))
-        validation = self.source.index("message.revision ~= cai_state.revision")
+        capture = self.source.index("drvc_capture_menu(false)", self.source.index('message.type ~= "execute"'))
+        validation = self.source.index("message.revision ~= drvc_state.revision")
         self.assertLess(capture, validation)
 
     def test_status_and_snapshots_advertise_runtime_capabilities(self) -> None:
-        self.assertIn("local cai_hook_version = 2", self.source)
+        self.assertIn("local drvc_hook_version = 2", self.source)
         for capability in ("guided_selection", "menu_control", "staged_transactions"):
             self.assertIn(f'"{capability}"', self.source)
-        self.assertGreaterEqual(self.source.count("hook_version = cai_hook_version"), 2)
-        self.assertGreaterEqual(self.source.count("capabilities = cai_capabilities"), 2)
+        self.assertGreaterEqual(self.source.count("hook_version = drvc_hook_version"), 2)
+        self.assertGreaterEqual(self.source.count("capabilities = drvc_capabilities"), 2)
 
 
 if __name__ == "__main__":

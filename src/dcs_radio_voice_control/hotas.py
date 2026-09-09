@@ -137,14 +137,14 @@ def wait_for_release(
 def resolve_binding(devices: Sequence[HotasDevice], saved: dict[str, object]) -> HotasBinding:
     button = saved.get("button")
     if not isinstance(button, int) or button < 1:
-        raise OSError("The saved HOTAS button is invalid. Open CombatAI configuration.")
+        raise OSError("The saved HOTAS button is invalid. Open DCS Radio Voice Control configuration.")
     saved_name = saved.get("name")
     saved_guid = saved.get("guid")
     candidates = [
         device for device in devices if (device.name, device.guid) == (saved_name, saved_guid)
     ]
     if len(candidates) != 1:
-        raise OSError("The saved HOTAS is no longer uniquely available. Open CombatAI configuration.")
+        raise OSError("The saved HOTAS is no longer uniquely available. Open DCS Radio Voice Control configuration.")
     device = candidates[0]
     if button > device.button_count:
         raise OSError(f"{device.name} no longer reports button {button}.")

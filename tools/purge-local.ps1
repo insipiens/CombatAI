@@ -16,7 +16,7 @@ foreach ($Pattern in @("runtime.new.*", "pygame.new.*")) {
         ForEach-Object { $Targets.Add($_.FullName) }
 }
 if ($env:TEMP) {
-    Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter "CombatAI-STT-*" -ErrorAction SilentlyContinue |
+    Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter "DCSRadioVoiceControl-STT-*" -ErrorAction SilentlyContinue |
         ForEach-Object { $Targets.Add($_.FullName) }
 }
 
@@ -57,9 +57,9 @@ foreach ($Target in $Targets | Select-Object -Unique) {
 
 if ($Errors.Count -gt 0) {
     foreach ($Message in $Errors) {
-        [Console]::Error.WriteLine("CombatAI uninstall failed: $Message")
+        [Console]::Error.WriteLine("DCS Radio Voice Control uninstall failed: $Message")
     }
-    throw "CombatAI uninstall was incomplete. Close processes using these files and run uninstall.bat again."
+    throw "DCS Radio Voice Control uninstall was incomplete. Close processes using these files and run uninstall.bat again."
 }
 
-Write-Host "Removed CombatAI runtime, speech components, models, and temporary setup files."
+Write-Host "Removed DCS Radio Voice Control runtime, speech components, models, and temporary setup files."

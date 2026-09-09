@@ -1,4 +1,4 @@
-"""Validated, atomic storage for user-facing CombatAI settings."""
+"""Validated, atomic storage for user-facing DCS Radio Voice Control settings."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def config_path() -> Path:
     root = os.environ.get("LOCALAPPDATA")
     if not root:
         raise OSError("Windows LOCALAPPDATA is not available.")
-    return Path(root) / "CombatAI" / "config.json"
+    return Path(root) / "DCSRadioVoiceControl" / "config.json"
 
 
 def default_document() -> dict[str, Any]:
@@ -46,9 +46,9 @@ def load_document(path: Path | None = None) -> dict[str, Any]:
     except FileNotFoundError:
         return document
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise OSError(f"Cannot read CombatAI configuration {target}: {exc}") from exc
+        raise OSError(f"Cannot read DCS Radio Voice Control configuration {target}: {exc}") from exc
     if not isinstance(raw, dict):
-        raise OSError(f"CombatAI configuration is not a JSON object: {target}")
+        raise OSError(f"DCS Radio Voice Control configuration is not a JSON object: {target}")
     document.update(raw)
     document["schema"] = SCHEMA
     document["matching"] = _validated_matching(raw.get("matching"))
@@ -70,7 +70,7 @@ def save_document(document: Mapping[str, Any], path: Path | None = None) -> Path
         os.replace(temporary, target)
     except OSError as exc:
         temporary.unlink(missing_ok=True)
-        raise OSError(f"Cannot save CombatAI configuration {target}: {exc}") from exc
+        raise OSError(f"Cannot save DCS Radio Voice Control configuration {target}: {exc}") from exc
     return target
 
 

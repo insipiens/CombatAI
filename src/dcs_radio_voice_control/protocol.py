@@ -1,4 +1,4 @@
-"""Versioned, deliberately small UDP protocol used by CombatAI and DCS."""
+"""Versioned, deliberately small UDP protocol used by DCS Radio Voice Control and DCS."""
 
 from __future__ import annotations
 

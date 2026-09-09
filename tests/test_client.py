@@ -5,7 +5,7 @@ import socket
 import threading
 import unittest
 
-from combatai.dcs_client import DcsMenuClient, REQUIRED_HOOK_CAPABILITIES
+from dcs_radio_voice_control.dcs_client import DcsMenuClient, REQUIRED_HOOK_CAPABILITIES
 
 
 class ClientTests(unittest.TestCase):

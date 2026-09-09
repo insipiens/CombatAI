@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from combatai.audio_cues import _cue_pcm, play_cue
+from dcs_radio_voice_control.audio_cues import _cue_pcm, play_cue
 
 
 class AudioCueTests(unittest.TestCase):

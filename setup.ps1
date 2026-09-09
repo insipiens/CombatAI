@@ -14,10 +14,10 @@ $PygameSha256 = "f495b0eb7a5c54c59da58e964bc7f68073c3f43cf307729fd48309104a04c19
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RuntimeDirectory = Join-Path $ProjectRoot "runtime"
 $PythonExe = Join-Path $RuntimeDirectory "python.exe"
-$RuntimeManifest = Join-Path $RuntimeDirectory "combatai-runtime.json"
+$RuntimeManifest = Join-Path $RuntimeDirectory "dcs_radio_voice_control-runtime.json"
 
-function Test-CombatAiRuntime {
-    if (-not (Test-CombatAiPythonRuntime)) {
+function Test-DcsRadioVoiceControlRuntime {
+    if (-not (Test-DcsRadioVoiceControlPythonRuntime)) {
         return $false
     }
     try {
@@ -35,7 +35,7 @@ function Test-CombatAiRuntime {
     }
 }
 
-function Test-CombatAiPythonRuntime {
+function Test-DcsRadioVoiceControlPythonRuntime {
     if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
         return $false
     }
@@ -56,20 +56,20 @@ function Test-CombatAiPythonRuntime {
     }
 }
 
-if (Test-CombatAiRuntime) {
-    Write-Host "CombatAI private Python $PythonVersion and SDL controller support are already ready."
+if (Test-DcsRadioVoiceControlRuntime) {
+    Write-Host "DCS Radio Voice Control private Python $PythonVersion and SDL controller support are already ready."
     exit 0
 }
 
 if (Test-Path -LiteralPath $RuntimeDirectory) {
-    if (-not (Test-CombatAiPythonRuntime)) {
+    if (-not (Test-DcsRadioVoiceControlPythonRuntime)) {
         throw "The runtime directory exists but its Python installation failed validation: $RuntimeDirectory`nMove it aside for inspection before running setup again."
     }
 }
 
-$DownloadPath = Join-Path ([System.IO.Path]::GetTempPath()) ("CombatAI-" + [guid]::NewGuid().ToString("N") + ".zip")
+$DownloadPath = Join-Path ([System.IO.Path]::GetTempPath()) ("DCSRadioVoiceControl-" + [guid]::NewGuid().ToString("N") + ".zip")
 $StagingDirectory = Join-Path $ProjectRoot ("runtime.new." + [guid]::NewGuid().ToString("N"))
-$PygameDownloadPath = Join-Path ([System.IO.Path]::GetTempPath()) ("CombatAI-" + [guid]::NewGuid().ToString("N") + ".whl")
+$PygameDownloadPath = Join-Path ([System.IO.Path]::GetTempPath()) ("DCSRadioVoiceControl-" + [guid]::NewGuid().ToString("N") + ".whl")
 $PygameStagingDirectory = Join-Path $ProjectRoot ("pygame.new." + [guid]::NewGuid().ToString("N"))
 
 try {
@@ -106,7 +106,7 @@ try {
             archive_sha256 = $PythonSha256
             configured_at = [DateTime]::UtcNow.ToString("o")
         }
-        $Manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $StagingDirectory "combatai-runtime.json") -Encoding UTF8
+        $Manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $StagingDirectory "dcs_radio_voice_control-runtime.json") -Encoding UTF8
 
         $StagedPython = Join-Path $StagingDirectory "python.exe"
         & $StagedPython -I -c "import sys; raise SystemExit(0 if sys.version_info[:3] == (3, 13, 15) else 1)"
@@ -115,7 +115,7 @@ try {
         }
 
         Move-Item -LiteralPath $StagingDirectory -Destination $RuntimeDirectory
-        Write-Host "CombatAI private Python $PythonVersion is ready in: $RuntimeDirectory"
+        Write-Host "DCS Radio Voice Control private Python $PythonVersion is ready in: $RuntimeDirectory"
     }
 
     Write-Host "Downloading pygame-ce $PygameVersion for SDL HOTAS support..."
@@ -149,7 +149,7 @@ try {
     $Manifest | Add-Member -NotePropertyName pygame_archive_sha256 -NotePropertyValue $PygameSha256 -Force
     $Manifest | ConvertTo-Json | Set-Content -LiteralPath $RuntimeManifest -Encoding UTF8
 
-    if (-not (Test-CombatAiRuntime)) {
+    if (-not (Test-DcsRadioVoiceControlRuntime)) {
         throw "SDL controller support failed its import self-test."
     }
     Write-Host "SDL HOTAS support is ready."

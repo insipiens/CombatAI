@@ -11,6 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class BootstrapTests(unittest.TestCase):
+    def test_project_uses_the_new_package_and_hook_identity(self) -> None:
+        self.assertTrue((ROOT / "src" / "dcs_radio_voice_control").is_dir())
+        self.assertFalse((ROOT / "src" / "combatai").exists())
+        self.assertTrue((ROOT / "dcs" / "DCSRadioVoiceControl.radio_hook.lua").is_file())
+        self.assertFalse((ROOT / "dcs" / "CombatAI.radio_hook.lua").exists())
+
     def test_runtime_is_pinned_and_hash_verified(self) -> None:
         setup = (ROOT / "setup.ps1").read_text(encoding="utf-8")
         self.assertIn('$PythonVersion = "3.13.15"', setup)
@@ -40,8 +46,8 @@ class BootstrapTests(unittest.TestCase):
     def test_user_runner_launches_voice_control(self) -> None:
         runner = (ROOT / "run.bat").read_text(encoding="utf-8")
         diagnostic = (ROOT / "radio-menu-test.bat").read_text(encoding="utf-8")
-        self.assertIn("-m combatai.launcher", runner)
-        self.assertIn("-m combatai", diagnostic)
+        self.assertIn("-m dcs_radio_voice_control.launcher", runner)
+        self.assertIn("-m dcs_radio_voice_control", diagnostic)
         self.assertNotIn("voice_command_test", diagnostic)
 
     def test_sdl_controller_runtime_is_pinned_and_hash_verified(self) -> None:
@@ -60,7 +66,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("whisper-bin-x64.zip", setup)
         self.assertIn("whisper-cublas-12.4.0-bin-x64.zip", setup)
         self.assertIn('[ValidateSet("auto", "cpu", "cuda12")]', setup)
-        self.assertIn("combatai-whisper.exe", setup)
+        self.assertIn("dcs_radio_voice_control-whisper.exe", setup)
         self.assertIn('[string]$Compute = "auto"', setup)
         self.assertIn("whisper-server.exe", setup)
         self.assertIn("ggml-base.en.bin", setup)

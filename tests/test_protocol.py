@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from combatai.protocol import (
+from dcs_radio_voice_control.protocol import (
     MAX_DATAGRAM_BYTES,
     MenuSnapshot,
     ProtocolError,

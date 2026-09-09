@@ -19,7 +19,7 @@ def log_directory() -> Path:
     root = os.environ.get("LOCALAPPDATA")
     if not root:
         raise OSError("Windows LOCALAPPDATA is not available.")
-    return Path(root) / "CombatAI" / "logs"
+    return Path(root) / "DCSRadioVoiceControl" / "logs"
 
 
 def write_event(event: str, **fields: Any) -> None:
@@ -31,10 +31,10 @@ def write_event(event: str, **fields: Any) -> None:
         directory.mkdir(parents=True, exist_ok=True)
         with _lock:
             _rotate(directory / "events.jsonl")
-            _rotate(directory / "combatai.log")
+            _rotate(directory / "dcs_radio_voice_control.log")
             with (directory / "events.jsonl").open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(document, ensure_ascii=False) + "\n")
-            with (directory / "combatai.log").open("a", encoding="utf-8") as stream:
+            with (directory / "dcs_radio_voice_control.log").open("a", encoding="utf-8") as stream:
                 stream.write(f"{timestamp} {event}: {summary}\n")
     except OSError:
         # Diagnostics must never prevent a radio command from operating.

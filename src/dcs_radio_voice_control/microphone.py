@@ -308,7 +308,7 @@ def show_meter(audio: AudioInput, microphone: Microphone, seconds: float) -> Non
 
 
 def main(argv: Sequence[str] | None = None, *, audio: AudioInput | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Choose and test the CombatAI microphone")
+    parser = argparse.ArgumentParser(description="Choose and test the DCS Radio Voice Control microphone")
     parser.add_argument(
         "--list", action="store_true", help="list devices without changing the selection"
     )

@@ -43,7 +43,7 @@ class WhisperCpp:
         process_factory: object = subprocess.Popen,
     ) -> None:
         self.directory = root / "stt"
-        self.executable = self.directory / "combatai-whisper.exe"
+        self.executable = self.directory / "dcs_radio_voice_control-whisper.exe"
         if Path(model_name).name != model_name:
             raise ValueError("Whisper model must be a filename")
         self.model = self.directory / model_name
@@ -102,7 +102,7 @@ class WhisperCpp:
     def transcribe(self, pcm: bytes, *, prompt: str | None = None) -> str:
         self.start()
         assert self._port is not None
-        boundary = "CombatAI-" + uuid.uuid4().hex
+        boundary = "DCSRadioVoiceControl-" + uuid.uuid4().hex
         fields = {
             "response_format": "json",
             "language": "en",

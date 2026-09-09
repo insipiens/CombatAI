@@ -5,7 +5,7 @@ import io
 from pathlib import Path
 import unittest
 
-from combatai.matcher import (
+from dcs_radio_voice_control.matcher import (
     MatchResult,
     RankedMatch,
     build_vocabulary_prompt,
@@ -14,9 +14,9 @@ from combatai.matcher import (
     normalize_phrase,
     strong_semantic_match,
 )
-from combatai.dcs_client import ActionResult
-from combatai.protocol import MenuItem, MenuSnapshot
-from combatai.voice_command_test import (
+from dcs_radio_voice_control.dcs_client import ActionResult
+from dcs_radio_voice_control.protocol import MenuItem, MenuSnapshot
+from dcs_radio_voice_control.voice_command_test import (
     MINIMUM_EXECUTION_SCORE,
     MINIMUM_EXECUTION_LEAD,
     contextual_catalogue,
@@ -180,7 +180,7 @@ class MatcherTests(unittest.TestCase):
 
     def test_matching_test_contains_no_execution_call(self) -> None:
         source = (
-            Path(__file__).parents[1] / "src" / "combatai" / "matching_test.py"
+            Path(__file__).parents[1] / "src" / "dcs_radio_voice_control" / "matching_test.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn(".execute(", source)
 
@@ -306,7 +306,7 @@ class MatcherTests(unittest.TestCase):
             def request_menu_and_wait(self, timeout: float) -> object:
                 return object()
 
-        with self.assertRaisesRegex(OSError, "older CombatAI hook"):
+        with self.assertRaisesRegex(OSError, "older DCS Radio Voice Control hook"):
             wait_for_catalogue(LegacyClient())  # type: ignore[arg-type]
 
 

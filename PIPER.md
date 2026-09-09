@@ -1,6 +1,6 @@
-# Piper speech in CombatAI
+# Piper speech in DCS Radio Voice Control
 
-CombatAI uses the pinned standalone Piper Windows executable and the
+DCS Radio Voice Control uses the pinned standalone Piper Windows executable and the
 `en_GB-alan-medium` voice. Setup downloads both from their upstream open-source releases
 and verifies them before use.
 
@@ -14,7 +14,7 @@ Piper runs once per response so an utterance has an unambiguous end. Synthesis r
 background thread. Pressing PTT terminates an active Piper process, stops SDL playback, and
 discards the interrupted PCM before microphone capture starts.
 
-CombatAI does not override Piper's length scale, sentence silence, or other voice controls;
+DCS Radio Voice Control does not override Piper's length scale, sentence silence, or other voice controls;
 Alan uses the model's native synthesis settings. SDL's logical mixer format is locked to the
 model's sample rate, and SDL converts to the output hardware without reinterpreting the PCM
 at a higher rate.

@@ -35,7 +35,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         recognizer.start()
 
-        print("CombatAI live command-matching test")
+        print("DCS Radio Voice Control live command-matching test")
         print(f"Microphone: {microphone.name}")
         print("Waiting for the live DCS radio catalogue...", flush=True)
         with DcsMenuClient() as client:
@@ -43,7 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if snapshot is None:
                 raise OSError(
                     "DCS did not return a radio catalogue. Start DCS, enter a mission, "
-                    "and close any other CombatAI console."
+                    "and close any other DCS Radio Voice Control console."
                 )
             print(f"Catalogue revision {snapshot.revision}: {len(snapshot.items)} commands")
             print("\nHold SPACE and speak. Release SPACE to transcribe and match.")

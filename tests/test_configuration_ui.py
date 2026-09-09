@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from combatai.configuration_ui import PAGE
+from dcs_radio_voice_control.configuration_ui import PAGE
 
 
 class ConfigurationUiTests(unittest.TestCase):
@@ -22,11 +22,13 @@ class ConfigurationUiTests(unittest.TestCase):
             "Recent activity",
             "Audio feedback",
             "Automatic startup",
-            "Start CombatAI with Windows",
+            "Start DCS Radio Voice Control with Windows",
             "Test accepted cue",
             "__TOKEN__",
         ):
             self.assertIn(label, PAGE)
+        self.assertIn("X-DCS-Radio-Voice-Control-Token", PAGE)
+        self.assertNotIn("X-DCS Radio Voice Control-Token", PAGE)
 
 
 if __name__ == "__main__":

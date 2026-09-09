@@ -13,7 +13,7 @@ def main() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    print("CombatAI radio-menu proof of concept")
+    print("DCS Radio Voice Control radio-menu proof of concept")
     print("Waiting for DCS on 127.0.0.1:34383 …")
 
     try:
@@ -32,7 +32,7 @@ def _run(client: DcsMenuClient) -> int:
     while client.request_menu_and_wait(timeout=2.0) is None:
         attempts += 1
         if attempts == 1:
-            print("DCS is not responding yet. Start DCS and enter a mission; Ctrl+C stops CombatAI.")
+            print("DCS is not responding yet. Start DCS and enter a mission; Ctrl+C stops DCS Radio Voice Control.")
         elif attempts % 5 == 0:
             print("Still waiting for an active DCS mission …")
 

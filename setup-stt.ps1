@@ -39,8 +39,8 @@ $Models = @{
 $Selected = $Models[$Model]
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SttDirectory = Join-Path $ProjectRoot "stt"
-$ManifestPath = Join-Path $SttDirectory "combatai-stt.json"
-$WorkerExe = Join-Path $SttDirectory "combatai-whisper.exe"
+$ManifestPath = Join-Path $SttDirectory "dcs_radio_voice_control-stt.json"
+$WorkerExe = Join-Path $SttDirectory "dcs_radio_voice_control-whisper.exe"
 $ModelPath = Join-Path $SttDirectory $Selected.Name
 $ModelUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$($Selected.Name)?download=true"
 
@@ -83,7 +83,7 @@ function Test-Worker([string]$Path) {
     finally { $Process.Dispose() }
 }
 
-$TemporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("CombatAI-STT-" + [guid]::NewGuid().ToString("N"))
+$TemporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("DCSRadioVoiceControl-STT-" + [guid]::NewGuid().ToString("N"))
 try {
     New-Item -ItemType Directory -Force -Path $SttDirectory, $TemporaryRoot | Out-Null
 
@@ -118,7 +118,7 @@ try {
         }
     }
     if (-not (Test-Worker $WorkerExe)) {
-        throw "The CombatAI Whisper worker failed its self-test."
+        throw "The DCS Radio Voice Control Whisper worker failed its self-test."
     }
 
     $NeedsModel = -not (Test-Path -LiteralPath $ModelPath -PathType Leaf)
@@ -148,13 +148,13 @@ try {
         schema = 2
         whisper_version = $WhisperVersion
         whisper_archive_sha256 = $WhisperSha256
-        worker = "combatai-whisper.exe"
+        worker = "dcs_radio_voice_control-whisper.exe"
         compute = $Compute
         models = $InstalledModels
         configured_at = [DateTime]::UtcNow.ToString("o")
     } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
 
-    Write-Host "CombatAI local speech recognition is ready."
+    Write-Host "DCS Radio Voice Control local speech recognition is ready."
     Write-Host "Worker: $WorkerExe"
     Write-Host "Model:  $ModelPath"
     Write-Host "Compute: $Compute"

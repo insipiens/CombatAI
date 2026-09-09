@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from combatai.configuration_store import (
+from dcs_radio_voice_control.configuration_store import (
     DEFAULT_MINIMUM_LEAD,
     DEFAULT_MINIMUM_SCORE,
     load_document,

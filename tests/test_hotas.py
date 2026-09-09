@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from combatai.hotas import HotasDevice, learn_binding, resolve_binding, wait_for_release
+from dcs_radio_voice_control.hotas import HotasDevice, learn_binding, resolve_binding, wait_for_release
 
 
 class FakeHotas:

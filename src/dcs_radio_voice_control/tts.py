@@ -25,10 +25,10 @@ class PiperSpeech:
     ) -> None:
         root = Path(__file__).resolve().parents[2]
         self.executable = executable or Path(
-            os.environ.get("COMBATAI_PIPER_EXE", root / "tools" / "piper" / "piper" / "piper.exe")
+            os.environ.get("DCS_RADIO_VOICE_CONTROL_PIPER_EXE", root / "tools" / "piper" / "piper" / "piper.exe")
         )
         self.model = model or Path(
-            os.environ.get("COMBATAI_PIPER_MODEL", root / "models" / "piper" / "en_GB-alan-medium.onnx")
+            os.environ.get("DCS_RADIO_VOICE_CONTROL_PIPER_MODEL", root / "models" / "piper" / "en_GB-alan-medium.onnx")
         )
         self.output = output or AudioOutput(output_device)
         self._last_text: str | None = None
@@ -63,7 +63,7 @@ class PiperSpeech:
         threading.Thread(
             target=self._synthesize,
             args=(text, generation),
-            name="CombatAI-Piper",
+            name="DCS Radio Voice Control-Piper",
             daemon=True,
         ).start()
 

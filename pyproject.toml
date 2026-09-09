@@ -3,23 +3,23 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "combatai"
+name = "dcs-radio-voice-control"
 version = "0.1.0"
-description = "A lightweight voice interface for DCS World in VR"
+description = "Deterministic voice control for DCS radio and mission menus"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-authors = [{name = "CombatAI contributors"}]
+authors = [{name = "DCS Radio Voice Control contributors"}]
 dependencies = []
 
 [project.scripts]
-combatai-menu = "combatai.console:main"
-combatai-microphone = "combatai.microphone:main"
-combatai-recording-test = "combatai.recording_test:main"
-combatai-transcription-test = "combatai.transcription_test:main"
-combatai-matching-test = "combatai.matching_test:main"
-combatai-voice-command-test = "combatai.voice_command_test:main"
-combatai-configuration = "combatai.configuration_ui:main"
+dcs-radio-voice-control-menu = "dcs_radio_voice_control.console:main"
+dcs-radio-voice-control-microphone = "dcs_radio_voice_control.microphone:main"
+dcs-radio-voice-control-recording-test = "dcs_radio_voice_control.recording_test:main"
+dcs-radio-voice-control-transcription-test = "dcs_radio_voice_control.transcription_test:main"
+dcs-radio-voice-control-matching-test = "dcs_radio_voice_control.matching_test:main"
+dcs-radio-voice-control-voice-command-test = "dcs_radio_voice_control.voice_command_test:main"
+dcs-radio-voice-control-configuration = "dcs_radio_voice_control.configuration_ui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

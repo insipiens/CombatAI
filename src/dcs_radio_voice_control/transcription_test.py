@@ -33,7 +33,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         recognizer.start()
 
-        print("CombatAI local transcription test")
+        print("DCS Radio Voice Control local transcription test")
         print(f"Microphone: {microphone.name}")
         print(
             f"Model: {recognizer.model.name} "

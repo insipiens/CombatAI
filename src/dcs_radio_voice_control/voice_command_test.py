@@ -1,4 +1,4 @@
-"""Run CombatAI's live DCS voice-control application."""
+"""Run DCS Radio Voice Control's live DCS voice-control application."""
 
 from __future__ import annotations
 
@@ -213,12 +213,12 @@ def wait_for_catalogue(client: DcsMenuClient) -> None:
     while client.request_menu_and_wait(timeout=2.0) is None:
         attempts += 1
         if attempts == 1:
-            print("DCS is not responding yet. Start DCS and enter a mission; Ctrl+C stops CombatAI.")
+            print("DCS is not responding yet. Start DCS and enter a mission; Ctrl+C stops DCS Radio Voice Control.")
         elif attempts % 5 == 0:
             print("Still waiting for an active DCS mission ...")
     if client.hook_status is None or not client.hook_status.compatible:
         raise OSError(
-            "DCS loaded an older CombatAI hook. Close DCS completely, run CombatAI "
+            "DCS loaded an older DCS Radio Voice Control hook. Close DCS completely, run DCS Radio Voice Control "
             "once to update it, then start DCS again."
         )
 
@@ -234,7 +234,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         # Keep Whisper, Piper, the microphone, and SDL unloaded until DCS has
-        # actually initialized the current CombatAI hook for a mission.
+        # actually initialized the current DCS Radio Voice Control hook for a mission.
         print("Waiting for DCS and an active mission...", flush=True)
         with DcsMenuClient() as readiness_client:
             wait_for_catalogue(readiness_client)
@@ -266,7 +266,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             base_ptt = SpacePushToTalk(keys)
         ptt = InterruptingPushToTalk(base_ptt, speech)
 
-        print("CombatAI voice control")
+        print("DCS Radio Voice Control voice control")
         print(f"Microphone: {microphone.name}")
         print(f"Push to talk: {ptt.label}")
         print(f"Execution gate: {minimum_score:.0%} match, {minimum_lead:.0%} lead")
@@ -364,7 +364,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if meta.kind == "repeat":
                         if speech.repeat():
                             response = speech.last_text
-                            print(f"CombatAI: {response}")
+                            print(f"DCS Radio Voice Control: {response}")
                             write_event(
                                 "meta_command",
                                 command="repeat",
@@ -546,7 +546,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                     listing = list_node_children(snapshot.items, meta.node)
                     response = spoken_listing(listing)
-                    print(f"CombatAI: {response}")
+                    print(f"DCS Radio Voice Control: {response}")
                     speech.speak(response)
                     meta_alias_recorded = bool(
                         listing.status == "not_found" and record_pending_meta_alias(transcript)
@@ -657,7 +657,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     )
                     if unavailable is not None:
                         response = f"{unavailable.item.label} is not currently available."
-                        print(f"CombatAI: {response}")
+                        print(f"DCS Radio Voice Control: {response}")
                         speech.speak(response)
                         write_event(
                             "command_rejected",
@@ -838,12 +838,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("\nCancelled.")
         return 130
     except OSError as exc:
-        if "older CombatAI hook" in str(exc):
+        if "older DCS Radio Voice Control hook" in str(exc):
             try:
                 set_controller_state("Restart DCS", str(exc))
             except OSError:
                 pass
-        print(f"CombatAI voice control failed: {exc}", file=sys.stderr)
+        print(f"DCS Radio Voice Control voice control failed: {exc}", file=sys.stderr)
         return 2
 
 

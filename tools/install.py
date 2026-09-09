@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install, inspect, or remove the experimental CombatAI DCS radio hook."""
+"""Install, inspect, or remove the experimental DCS Radio Voice Control DCS radio hook."""
 
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ if not __package__:
     # importing the tools package.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.build_radio_overlay import BEGIN_MARKER, build_overlay
+from tools.build_radio_overlay import BEGIN_MARKER, LEGACY_BEGIN_MARKER, build_overlay
 
 RELATIVE_PANEL = Path("Scripts/UI/RadioCommandDialogPanel/RadioCommandDialogsPanel.lua")
-STATE_DIRECTORY = Path("Scripts/CombatAI")
+STATE_DIRECTORY = Path("Scripts/DCSRadioVoiceControl")
 MANIFEST_NAME = "install.json"
 
 
@@ -42,7 +42,7 @@ def file_hash(path: Path) -> str:
 
 
 def install_hook(dcs_install: Path, saved_games: Path, hook: Path) -> dict[str, Any]:
-    """Append CombatAI to the radio panel DCS actually loads from its installation."""
+    """Append DCS Radio Voice Control to the radio panel DCS actually loads from its installation."""
 
     dcs_install = dcs_install.resolve()
     saved_games = saved_games.resolve()
@@ -54,7 +54,12 @@ def install_hook(dcs_install: Path, saved_games: Path, hook: Path) -> dict[str, 
     if not core_panel.is_file():
         raise InstallError(f"DCS radio-panel file was not found: {core_panel}")
     if not hook.is_file() or BEGIN_MARKER not in hook.read_bytes():
-        raise InstallError(f"CombatAI hook is missing or invalid: {hook}")
+        raise InstallError(f"DCS Radio Voice Control hook is missing or invalid: {hook}")
+    if LEGACY_BEGIN_MARKER in core_panel.read_bytes():
+        raise InstallError(
+            "The former CombatAI hook is still installed. Use that installation's "
+            "uninstall.bat before installing DCS Radio Voice Control."
+        )
 
     migrated: dict[str, Any] | None = None
     if manifest_path.exists():
@@ -72,7 +77,7 @@ def install_hook(dcs_install: Path, saved_games: Path, hook: Path) -> dict[str, 
 
     if BEGIN_MARKER in core_panel.read_bytes():
         raise InstallError(
-            "The active radio-panel file already contains CombatAI but has no usable manifest; "
+            "The active radio-panel file already contains DCS Radio Voice Control but has no usable manifest; "
             "manual inspection is required"
         )
 
@@ -82,7 +87,7 @@ def install_hook(dcs_install: Path, saved_games: Path, hook: Path) -> dict[str, 
     backup_path = backup_directory / f"RadioCommandDialogsPanel.{uuid4().hex}.lua"
     shutil.copy2(core_panel, backup_path)
 
-    staged_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.combatai-new")
+    staged_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.dcs_radio_voice_control-new")
     installed = False
     try:
         base_sha256 = build_overlay(core_panel, hook, staged_path)
@@ -120,25 +125,25 @@ def _update_active_installation(
     hook: Path,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
-    """Replace only a verified CombatAI overlay while preserving its original backup."""
+    """Replace only a verified DCS Radio Voice Control overlay while preserving its original backup."""
 
     target = Path(manifest["target"])
     backup = Path(manifest["backup"])
     if manifest.get("schema") != 2 or manifest.get("base_kind") != "active_dcs_panel":
-        raise InstallError("The active CombatAI manifest cannot be updated safely")
+        raise InstallError("The active DCS Radio Voice Control manifest cannot be updated safely")
     if target.resolve() != core_panel.resolve():
         raise InstallError("Manifest target does not belong to the selected DCS installation")
     _validate_backup_location(backup, state_directory)
     if not target.is_file() or file_hash(target) != manifest["installed_sha256"]:
         raise InstallError(
-            "The installed radio-panel file has changed since CombatAI was installed; "
+            "The installed radio-panel file has changed since DCS Radio Voice Control was installed; "
             "refusing to overwrite changes made by DCS, VAICOM, or another mod"
         )
     if not backup.is_file() or file_hash(backup) != manifest["base_sha256"]:
         raise InstallError(f"The recorded backup is missing or altered: {backup}")
 
-    staged_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.combatai-new")
-    previous_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.combatai-old")
+    staged_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.dcs_radio_voice_control-new")
+    previous_path = core_panel.with_name(core_panel.name + f".{uuid4().hex}.dcs_radio_voice_control-old")
     replaced = False
     try:
         base_sha256 = build_overlay(backup, hook, staged_path)
@@ -178,7 +183,7 @@ def uninstall_hook(dcs_install: Path, saved_games: Path) -> dict[str, Any]:
     state_directory = saved_games / STATE_DIRECTORY
     manifest_path = state_directory / MANIFEST_NAME
     if not manifest_path.is_file():
-        raise InstallError(f"No active CombatAI installation manifest was found: {manifest_path}")
+        raise InstallError(f"No active DCS Radio Voice Control installation manifest was found: {manifest_path}")
 
     manifest = _read_manifest(manifest_path)
     if _is_legacy_saved_games_install(manifest, saved_games):
@@ -194,7 +199,7 @@ def uninstall_hook(dcs_install: Path, saved_games: Path) -> dict[str, Any]:
         raise InstallError(f"Installed radio-panel file is missing: {target}")
     if file_hash(target) != manifest["installed_sha256"]:
         raise InstallError(
-            "The installed radio-panel file has changed since CombatAI was installed; "
+            "The installed radio-panel file has changed since DCS Radio Voice Control was installed; "
             "refusing to overwrite changes made by DCS, VAICOM, or another mod"
         )
     if not backup.is_file() or file_hash(backup) != manifest["base_sha256"]:
@@ -214,7 +219,7 @@ def uninstall_hook(dcs_install: Path, saved_games: Path) -> dict[str, Any]:
 def purge_installation(
     dcs_install: Path, saved_games: Path, local_app_data: Path | None
 ) -> dict[str, Any]:
-    """Remove the verified DCS hook plus every machine-level CombatAI artifact."""
+    """Remove the verified DCS hook plus every machine-level DCS Radio Voice Control artifact."""
 
     dcs_install = dcs_install.resolve()
     saved_games = saved_games.resolve()
@@ -227,7 +232,7 @@ def purge_installation(
     else:
         if active_target.is_file() and BEGIN_MARKER in active_target.read_bytes():
             raise InstallError(
-                "The active radio-panel file still contains CombatAI but no usable manifest "
+                "The active radio-panel file still contains DCS Radio Voice Control but no usable manifest "
                 "exists; refusing an unverifiable removal"
             )
         result = {"outcome": "dcs_hook_already_absent"}
@@ -239,7 +244,7 @@ def purge_installation(
             "Windows LOCALAPPDATA is unavailable; user settings cannot be located"
         )
     else:
-        cleanup_targets.append(("local settings and logs", local_app_data / "CombatAI"))
+        cleanup_targets.append(("local settings and logs", local_app_data / "DCSRadioVoiceControl"))
 
     removed: list[str] = []
     for label, target in cleanup_targets:
@@ -254,7 +259,7 @@ def purge_installation(
             cleanup_errors.append(f"could not remove {label} at {target}: {exc}")
 
     if active_target.is_file() and BEGIN_MARKER in active_target.read_bytes():
-        cleanup_errors.append(f"the CombatAI hook remains in {active_target}")
+        cleanup_errors.append(f"the DCS Radio Voice Control hook remains in {active_target}")
     if os.name == "nt":
         try:
             import winreg
@@ -262,7 +267,7 @@ def purge_installation(
             run_key = r"Software\Microsoft\Windows\CurrentVersion\Run"
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, run_key) as key:
                 try:
-                    winreg.DeleteValue(key, "CombatAI")
+                    winreg.DeleteValue(key, "DCS Radio Voice Control")
                 except FileNotFoundError:
                     pass
         except OSError as exc:
@@ -320,12 +325,20 @@ def installation_preflight(
     if not target.is_file():
         return {"state": "repair_required", "detail": f"DCS radio-panel file is missing: {target}"}
     if not hook.is_file() or BEGIN_MARKER not in hook.read_bytes():
-        return {"state": "repair_required", "detail": f"CombatAI hook is missing or invalid: {hook}"}
+        return {"state": "repair_required", "detail": f"DCS Radio Voice Control hook is missing or invalid: {hook}"}
+    if LEGACY_BEGIN_MARKER in target.read_bytes():
+        return {
+            "state": "repair_required",
+            "detail": (
+                "The former CombatAI hook is still installed. Use that installation's "
+                "uninstall.bat before installing DCS Radio Voice Control."
+            ),
+        }
     if not manifest_path.is_file():
         if BEGIN_MARKER in target.read_bytes():
             return {
                 "state": "repair_required",
-                "detail": "The DCS panel contains CombatAI but its installation record is missing.",
+                "detail": "The DCS panel contains DCS Radio Voice Control but its installation record is missing.",
             }
         return {"state": "install_required", "target": str(target)}
 
@@ -345,7 +358,7 @@ def installation_preflight(
                 "state": "repair_required",
                 "detail": f"The verified DCS panel backup is missing or altered: {backup}",
             }
-        with tempfile.TemporaryDirectory(prefix="CombatAI-preflight-") as directory:
+        with tempfile.TemporaryDirectory(prefix="DCSRadioVoiceControl-preflight-") as directory:
             candidate = Path(directory) / "RadioCommandDialogsPanel.lua"
             base_sha256 = build_overlay(backup, hook, candidate)
             if base_sha256 != manifest["base_sha256"]:
@@ -453,7 +466,7 @@ def _is_legacy_saved_games_install(manifest: dict[str, Any], saved_games: Path) 
 def _remove_legacy_saved_games_install(
     saved_games: Path, manifest: dict[str, Any]
 ) -> dict[str, Any]:
-    """Safely remove the inactive Saved Games overlay produced by early CombatAI builds."""
+    """Safely remove the inactive Saved Games overlay produced by early DCS Radio Voice Control builds."""
 
     saved_games = saved_games.resolve()
     state_directory = saved_games / STATE_DIRECTORY
@@ -497,7 +510,7 @@ def _remove_legacy_saved_games_install(
 def _validate_backup_location(backup: Path, state_directory: Path) -> None:
     expected = (state_directory / "backups").resolve()
     if backup.resolve().parent != expected:
-        raise InstallError("Manifest backup does not belong to the CombatAI backup directory")
+        raise InstallError("Manifest backup does not belong to the DCS Radio Voice Control backup directory")
 
 
 def _archive_manifest(manifest_path: Path, state_directory: Path, action: str) -> Path:
@@ -605,7 +618,7 @@ def _run_elevated(arguments: list[str]) -> int:
     kernel32.CloseHandle.restype = wintypes.BOOL
 
     result_descriptor, result_name = tempfile.mkstemp(
-        prefix="CombatAI-elevated-", suffix=".txt"
+        prefix="DCSRadioVoiceControl-elevated-", suffix=".txt"
     )
     os.close(result_descriptor)
     result_path = Path(result_name)
@@ -675,7 +688,7 @@ def main() -> int:
     install_parser.add_argument(
         "--hook",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "dcs" / "CombatAI.radio_hook.lua",
+        default=Path(__file__).resolve().parents[1] / "dcs" / "DCSRadioVoiceControl.radio_hook.lua",
     )
     install_parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
     install_parser.add_argument("--result-file", type=Path, help=argparse.SUPPRESS)
@@ -688,7 +701,7 @@ def main() -> int:
             command_parser.add_argument(
                 "--hook",
                 type=Path,
-                default=Path(__file__).resolve().parents[1] / "dcs" / "CombatAI.radio_hook.lua",
+                default=Path(__file__).resolve().parents[1] / "dcs" / "DCSRadioVoiceControl.radio_hook.lua",
             )
         if name == "uninstall":
             command_parser.add_argument(
@@ -727,7 +740,7 @@ def main() -> int:
             result = installation_status(dcs_install, saved_games)
     except (InstallError, FileNotFoundError, PermissionError, ValueError) as exc:
         _emit_result(
-            f"CombatAI: {exc}", getattr(args, "result_file", None), error=True
+            f"DCS Radio Voice Control: {exc}", getattr(args, "result_file", None), error=True
         )
         return 1
     _emit_result(

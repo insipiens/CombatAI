@@ -20,8 +20,8 @@ from .event_log import write_event
 from .stt import PROJECT_ROOT
 
 
-HOOK = PROJECT_ROOT / "dcs" / "CombatAI.radio_hook.lua"
-VOICE_COMMAND = [sys.executable, "-m", "combatai.voice_command_test"]
+HOOK = PROJECT_ROOT / "dcs" / "DCSRadioVoiceControl.radio_hook.lua"
+VOICE_COMMAND = [sys.executable, "-m", "dcs_radio_voice_control.voice_command_test"]
 DCS_IMAGE_NAMES = {"dcs.exe", "dcs_server.exe"}
 _last_state: tuple[str, str] | None = None
 
@@ -131,7 +131,7 @@ def single_instance() -> Iterator[bool]:
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
     ctypes.set_last_error(0)
-    handle = kernel32.CreateMutexW(None, False, "Local\\CombatAIController")
+    handle = kernel32.CreateMutexW(None, False, "Local\\DCSRadioVoiceControlController")
     acquired = bool(handle) and ctypes.get_last_error() != 183
     try:
         yield acquired
@@ -151,7 +151,7 @@ def _state(name: str, message: str = "") -> None:
         pass
     write_event("controller_state", state=name, message=message)
     if sys.stdout is not None:
-        print(f"CombatAI: {name}{': ' + message if message else ''}", flush=True)
+        print(f"DCS Radio Voice Control: {name}{': ' + message if message else ''}", flush=True)
 
 
 def _notify(title: str, message: str) -> None:
@@ -223,10 +223,10 @@ def automatic_controller(
         return 0
     ready, restart = _prepare(process_probe())
     if not ready and not restart:
-        _notify("CombatAI repair required", "CombatAI could not verify its DCS hook. Run install.bat for details.")
+        _notify("DCS Radio Voice Control repair required", "DCS Radio Voice Control could not verify its DCS hook. Run install.bat for details.")
         return 2
     if restart:
-        _notify("Restart DCS", "CombatAI updated its DCS hook. Close DCS completely and start it again.")
+        _notify("Restart DCS", "DCS Radio Voice Control updated its DCS hook. Close DCS completely and start it again.")
     worker: subprocess.Popen[bytes] | None = None
     try:
         hook_stamp = HOOK.stat().st_mtime_ns
@@ -251,13 +251,13 @@ def automatic_controller(
             if restart:
                 _notify(
                     "Restart DCS",
-                    "CombatAI updated its DCS hook. Close DCS completely and start it again.",
+                    "DCS Radio Voice Control updated its DCS hook. Close DCS completely and start it again.",
                 )
                 continue
             if not ready:
                 _notify(
-                    "CombatAI repair required",
-                    "CombatAI could not verify its DCS hook. Run install.bat for details.",
+                    "DCS Radio Voice Control repair required",
+                    "DCS Radio Voice Control could not verify its DCS hook. Run install.bat for details.",
                 )
                 while process_probe():
                     time.sleep(poll_seconds)
@@ -274,7 +274,7 @@ def automatic_controller(
             child_state = get_state().get("state")
             if child_state == "Restart DCS":
                 restart = True
-                _notify("Restart DCS", "DCS loaded an older CombatAI hook. Close DCS completely and start it again.")
+                _notify("Restart DCS", "DCS loaded an older DCS Radio Voice Control hook. Close DCS completely and start it again.")
                 continue
             _state("Repair required", "Voice control stopped unexpectedly; restart DCS after checking the logs.")
             while process_probe():
@@ -290,8 +290,8 @@ def automatic_controller(
                 ready, restart = _prepare(False)
                 if not ready and not restart:
                     _notify(
-                        "CombatAI repair required",
-                        "CombatAI could not verify its DCS hook. Run install.bat for details.",
+                        "DCS Radio Voice Control repair required",
+                        "DCS Radio Voice Control could not verify its DCS hook. Run install.bat for details.",
                     )
             if ready:
                 _state("Waiting for DCS")
@@ -301,7 +301,7 @@ def automatic_controller(
 def manual_launch(voice_arguments: Sequence[str]) -> int:
     ready, restart = _prepare(dcs_is_running())
     if restart:
-        print("Close DCS completely, start it again, then run CombatAI.", file=sys.stderr)
+        print("Close DCS completely, start it again, then run DCS Radio Voice Control.", file=sys.stderr)
         return 3
     if not ready:
         return 2
@@ -315,7 +315,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     with single_instance() as acquired:
         if not acquired:
             if sys.stdout is not None:
-                print("CombatAI is already running.")
+                print("DCS Radio Voice Control is already running.")
             return 0
         if args.automatic:
             return automatic_controller()

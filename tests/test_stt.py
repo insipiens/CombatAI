@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from combatai.stt import MODEL_NAME, WhisperCpp, _multipart
+from dcs_radio_voice_control.stt import MODEL_NAME, WhisperCpp, _multipart
 
 
 class SttTests(unittest.TestCase):
@@ -23,10 +23,10 @@ class SttTests(unittest.TestCase):
             root = Path(directory)
             stt = root / "stt"
             stt.mkdir()
-            (stt / "combatai-whisper.exe").write_bytes(b"test")
+            (stt / "dcs_radio_voice_control-whisper.exe").write_bytes(b"test")
             (stt / MODEL_NAME).write_bytes(b"test")
             WhisperCpp(root).validate()
-            self.assertEqual(list(root.glob("**/CombatAI-*.wav")), [])
+            self.assertEqual(list(root.glob("**/DCSRadioVoiceControl-*.wav")), [])
 
     def test_multipart_frames_prompt_and_in_memory_wave(self) -> None:
         body = _multipart(

@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from combatai.alias_store import record_pending_alias, record_pending_meta_alias
+from dcs_radio_voice_control.alias_store import record_pending_alias, record_pending_meta_alias
 
 
 class AliasStoreTests(unittest.TestCase):

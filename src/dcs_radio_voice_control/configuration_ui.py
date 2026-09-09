@@ -50,7 +50,7 @@ class ConfigurationApplication:
         models.add(str(document["stt"]["model"]))
         compute = "cpu"
         try:
-            manifest = json.loads((PROJECT_ROOT / "stt" / "combatai-stt.json").read_text(encoding="utf-8-sig"))
+            manifest = json.loads((PROJECT_ROOT / "stt" / "dcs_radio_voice_control-stt.json").read_text(encoding="utf-8-sig"))
             if isinstance(manifest, dict) and manifest.get("compute") == "cuda12":
                 compute = "cuda12"
         except (OSError, json.JSONDecodeError):
@@ -173,7 +173,7 @@ class ConfigurationApplication:
 
     def voice_test(self, request: dict[str, Any]) -> dict[str, Any]:
         speech = PiperSpeech(output_device=request.get("output_device") or None)
-        speech.speak("CombatAI ready. Flight, rejoin formation.")
+        speech.speak("DCS Radio Voice Control ready. Flight, rejoin formation.")
         return {"played": True}
 
 
@@ -200,7 +200,7 @@ class ConfigurationHandler(BaseHTTPRequestHandler):
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
     def do_POST(self) -> None:
-        if self.headers.get("X-CombatAI-Token") != self.server.token:
+        if self.headers.get("X-DCS-Radio-Voice-Control-Token") != self.server.token:
             self._json({"error": "Invalid local configuration token."}, HTTPStatus.FORBIDDEN)
             return
         try:
@@ -273,7 +273,7 @@ def main() -> int:
         application = ConfigurationApplication()
         server = ConfigurationServer(application)
         address = f"http://{HOST}:{PORT}/"
-        print("CombatAI configuration")
+        print("DCS Radio Voice Control configuration")
         print(f"Opening {address}")
         print(f"Configuration: {config_path()}")
         print(f"Logs: {log_directory()}")
@@ -290,22 +290,22 @@ def main() -> int:
 
 PAGE = r'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CombatAI configuration</title>
+<title>DCS Radio Voice Control configuration</title>
 <style>
 :root{color-scheme:dark;--bg:#0d1117;--panel:#161b22;--line:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--ok:#3fb950;--bad:#f85149}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif}.wrap{max-width:980px;margin:auto;padding:32px 20px}h1{margin:0 0 4px;font-size:28px}h2{font-size:18px;margin:0 0 18px}.sub,.hint{color:var(--muted)}h3{font-size:15px;margin:0 0 8px}.audio-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:24px}.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}.wide{grid-column:1/-1}label{display:block;margin:14px 0 6px}select,input[type=range],button{width:100%}select,button{background:#21262d;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px}button{cursor:pointer;font-weight:600;margin-top:10px}button.primary{background:#1f6feb;border-color:#388bfd}button:hover{border-color:var(--accent)}.value{float:right;color:var(--accent)}.status{margin-top:12px;padding:10px;border-radius:6px;background:#0d1117;min-height:42px}.pressed{background:#123d20;color:#7ee787}.error{color:#ff7b72}.paths{font-size:12px;color:var(--muted);word-break:break-all}.log{max-height:280px;overflow:auto;font:12px/1.5 ui-monospace,monospace;background:#0d1117;padding:10px;border-radius:6px}.log div{border-bottom:1px solid #21262d;padding:3px 0}@media(max-width:720px){.grid,.audio-grid{grid-template-columns:1fr}.wide{grid-column:auto}}
-</style></head><body><main class="wrap"><h1>CombatAI</h1><div class="sub">Local voice-command configuration</div>
+</style></head><body><main class="wrap"><h1>DCS Radio Voice Control</h1><div class="sub">Local voice-command configuration</div>
 <div class="grid">
 <section class="card wide"><h2>Audio devices</h2><div class="audio-grid"><div><h3>Microphone input</h3><label for="microphone">Recording device</label><select id="microphone"></select><button id="micTest">Run three-second level test</button><div id="micResult" class="status">No test run.</div></div><div><h3>Speech and cue output</h3><label for="output">Playback device</label><select id="output"></select><button id="testVoice">Test Alan voice</button><h3>Audio feedback</h3><label><input id="audioCues" type="checkbox"> Play accepted and rejected cues</label><label>Cue volume <span id="cueValue" class="value"></span></label><input id="cueVolume" type="range" step="0.05"><button id="testAccepted">Test accepted cue</button><button id="testRejected">Test rejected cue</button></div></div></section>
 <section class="card"><h2>Push to talk</h2><div id="pttCurrent" class="status">Loading…</div><div id="controllers" class="hint"></div><button id="learnPtt" class="primary">Learn a HOTAS button</button><button id="keyboardPtt">Use Space only</button><div class="hint">Learning ignores controls already held when scanning starts. Press and release the desired button.</div></section>
 <section class="card"><h2>Command matching</h2><label>Minimum match <span id="scoreValue" class="value"></span></label><input id="score" type="range" step="0.01"><label>Minimum lead over runner-up <span id="leadValue" class="value"></span></label><input id="lead" type="range" step="0.01"><div class="hint">Both conditions must pass before a command is sent.</div></section>
 <section class="card"><h2>Speech recognition</h2><label for="model">Installed Whisper model</label><select id="model"></select><label><input id="useGpu" type="checkbox"> Use GPU acceleration (experimental)</label><div class="hint">Install another model with setup-stt.bat small.en or medium.en. Install the optional CUDA worker with setup-stt.bat base.en cuda12. Live DCS vocabulary prompting remains enabled.</div></section>
-<section class="card"><h2>Automatic startup</h2><label><input id="startWithWindows" type="checkbox"> Start CombatAI with Windows</label><div class="hint">A lightweight controller waits for DCS. Whisper, Piper, the microphone, and GPU support load only after a mission and the DCS hook are ready.</div><div id="controllerState" class="status">Loading…</div></section>
+<section class="card"><h2>Automatic startup</h2><label><input id="startWithWindows" type="checkbox"> Start DCS Radio Voice Control with Windows</label><div class="hint">A lightweight controller waits for DCS. Whisper, Piper, the microphone, and GPU support load only after a mission and the DCS hook are ready.</div><div id="controllerState" class="status">Loading…</div></section>
 <section class="card wide"><button id="save" class="primary">Save configuration</button><div id="saveResult" class="status">No unsaved changes.</div><div id="paths" class="paths"></div></section>
 <section class="card wide"><h2>Recent activity</h2><div id="logs" class="log">No events yet.</div></section>
 </div></main><script>
 const token='__TOKEN__';let state=null;let learning=false;
 const $=id=>document.getElementById(id);const pct=n=>Math.round(n*100)+'%';
-async function api(path,body){const options=body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-CombatAI-Token':token},body:JSON.stringify(body)};const response=await fetch(path,options);const value=await response.json();if(!response.ok)throw new Error(value.error||'Request failed');return value}
+async function api(path,body){const options=body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-DCS-Radio-Voice-Control-Token':token},body:JSON.stringify(body)};const response=await fetch(path,options);const value=await response.json();if(!response.ok)throw new Error(value.error||'Request failed');return value}
 function option(select,value,label){const node=document.createElement('option');node.value=value;node.textContent=label;select.appendChild(node)}
 function render(s){state=s;const c=s.config;$('microphone').innerHTML='';s.microphones.forEach(m=>option($('microphone'),m.device_id,m.name));if(c.microphone)$('microphone').value=c.microphone.device_id;$('score').min=s.score_range[0];$('score').max=s.score_range[1];$('score').value=c.matching.minimum_score;$('lead').min=s.lead_range[0];$('lead').max=s.lead_range[1];$('lead').value=c.matching.minimum_lead;$('audioCues').checked=c.feedback.audio_cues;$('cueVolume').min=s.cue_volume_range[0];$('cueVolume').max=s.cue_volume_range[1];$('cueVolume').value=c.feedback.cue_volume;$('model').innerHTML='';s.models.forEach(m=>option($('model'),m,m));$('model').value=c.stt.model;$('useGpu').checked=c.stt.use_gpu&&s.stt_compute==='cuda12';$('useGpu').disabled=s.stt_compute!=='cuda12';$('output').innerHTML='';option($('output'),'','Windows default');s.outputs.forEach(d=>option($('output'),d,d));$('output').value=c.audio.output_device||'';$('startWithWindows').checked=c.startup.start_with_windows;$('controllerState').textContent=`${s.controller.state}${s.controller.message?' — '+s.controller.message:''}`;values();const p=c.ptt;$('pttCurrent').textContent=p.mode==='hotas'?`${p.name} — button ${p.button}`:'Space keyboard';$('controllers').textContent=s.controllers.length?s.controllers.map(d=>`${d.name} (${d.button_count} buttons)`).join(' · '):'No SDL controllers detected.';$('paths').textContent=`Configuration: ${s.config_path} · Logs: ${s.log_path}`;renderLogs(s.events)}
 function values(){$('scoreValue').textContent=pct(+$('score').value);$('leadValue').textContent=pct(+$('lead').value);$('cueValue').textContent=pct(+$('cueVolume').value)}

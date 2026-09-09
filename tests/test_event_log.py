@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from combatai.event_log import recent_events, write_event
+from dcs_radio_voice_control.event_log import recent_events, write_event
 
 
 class EventLogTests(unittest.TestCase):
@@ -21,8 +21,8 @@ class EventLogTests(unittest.TestCase):
                 reason="insufficient_lead",
                 candidates=[{"score": 0.89}],
             )
-            root = Path(directory) / "CombatAI" / "logs"
-            self.assertIn("command_rejected", (root / "combatai.log").read_text(encoding="utf-8"))
+            root = Path(directory) / "DCSRadioVoiceControl" / "logs"
+            self.assertIn("command_rejected", (root / "dcs_radio_voice_control.log").read_text(encoding="utf-8"))
             document = json.loads((root / "events.jsonl").read_text(encoding="utf-8"))
             self.assertEqual(document["transcript"], "Wingman great left")
             self.assertEqual(recent_events()[0]["reason"], "insufficient_lead")

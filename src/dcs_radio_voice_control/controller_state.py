@@ -1,4 +1,4 @@
-"""Small durable status record for the lightweight CombatAI controller."""
+"""Small durable status record for the lightweight DCS Radio Voice Control controller."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def state_path() -> Path:
     root = os.environ.get("LOCALAPPDATA")
     if not root:
         raise OSError("Windows LOCALAPPDATA is not available.")
-    return Path(root) / "CombatAI" / "controller-status.json"
+    return Path(root) / "DCSRadioVoiceControl" / "controller-status.json"
 
 
 def set_state(state: str, message: str = "") -> None:

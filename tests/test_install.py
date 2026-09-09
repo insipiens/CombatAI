@@ -19,7 +19,7 @@ from tools.install import (
 )
 
 
-HOOK = b"-- COMBATAI RADIO HOOK BEGIN\nreturn true\n"
+HOOK = b"-- DCS RADIO VOICE CONTROL HOOK BEGIN\nreturn true\n"
 
 
 class InstallTests(unittest.TestCase):
@@ -54,7 +54,7 @@ class InstallTests(unittest.TestCase):
     def test_full_purge_removes_saved_state_and_local_data(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)
         local_app_data = self.root / "LocalAppData"
-        user_state = local_app_data / "CombatAI"
+        user_state = local_app_data / "DCSRadioVoiceControl"
         user_state.mkdir(parents=True)
         (user_state / "config.json").write_text("{}", encoding="utf-8")
 
@@ -62,13 +62,22 @@ class InstallTests(unittest.TestCase):
 
         self.assertEqual(result["outcome"], "restored_active_dcs_panel")
         self.assertEqual(self.core.read_bytes(), self.original_core)
-        self.assertFalse((self.saved / "Scripts" / "CombatAI").exists())
+        self.assertFalse((self.saved / "Scripts" / "DCSRadioVoiceControl").exists())
         self.assertFalse(user_state.exists())
 
     def test_full_purge_refuses_untracked_hook(self) -> None:
         self.core.write_bytes(self.original_core + HOOK)
         with self.assertRaisesRegex(InstallError, "no usable manifest"):
             purge_installation(self.dcs, self.saved, self.root / "LocalAppData")
+
+    def test_install_refuses_the_former_combatai_hook(self) -> None:
+        self.core.write_bytes(self.original_core + b"-- COMBATAI RADIO HOOK BEGIN\n")
+        with self.assertRaisesRegex(InstallError, "former CombatAI hook"):
+            install_hook(self.dcs, self.saved, self.hook)
+        self.assertEqual(
+            installation_preflight(self.dcs, self.saved, self.hook)["state"],
+            "repair_required",
+        )
 
     def test_preserves_and_restores_vaicom_in_active_panel(self) -> None:
         vaicom_core = self.original_core + b"-- VAICOM server-side script\n"
@@ -144,14 +153,14 @@ class InstallTests(unittest.TestCase):
 
     def test_manifest_contains_no_file_contents(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)
-        manifest_path = self.saved / "Scripts" / "CombatAI" / "install.json"
+        manifest_path = self.saved / "Scripts" / "DCSRadioVoiceControl" / "install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["schema"], 2)
         self.assertNotIn("content", manifest)
 
     def test_uninstall_rejects_redirected_backup(self) -> None:
         install_hook(self.dcs, self.saved, self.hook)
-        manifest_path = self.saved / "Scripts" / "CombatAI" / "install.json"
+        manifest_path = self.saved / "Scripts" / "DCSRadioVoiceControl" / "install.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["backup"] = str(self.core)
         manifest["base_sha256"] = manifest["installed_sha256"]
@@ -186,7 +195,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(manifest["schema"], 2)
         self.assertEqual(self.saved_panel.read_bytes(), vaicom_saved)
         self.assertIn(HOOK, self.core.read_bytes())
-        archives = list((self.saved / "Scripts" / "CombatAI").glob("install.migrated.*.json"))
+        archives = list((self.saved / "Scripts" / "DCSRadioVoiceControl").glob("install.migrated.*.json"))
         self.assertEqual(len(archives), 1)
 
     def test_legacy_file_already_restored_by_vaicom_is_migrated(self) -> None:
@@ -240,7 +249,7 @@ class InstallTests(unittest.TestCase):
     def _create_legacy_install(
         self, base: bytes, base_kind: str = "saved_games_override"
     ) -> None:
-        state = self.saved / "Scripts" / "CombatAI"
+        state = self.saved / "Scripts" / "DCSRadioVoiceControl"
         backups = state / "backups"
         backups.mkdir(parents=True)
         self.saved_panel.parent.mkdir(parents=True, exist_ok=True)

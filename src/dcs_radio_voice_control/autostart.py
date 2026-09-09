@@ -11,12 +11,12 @@ from .stt import PROJECT_ROOT
 
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-VALUE_NAME = "CombatAI"
+VALUE_NAME = "DCS Radio Voice Control"
 
 
 def expected_command(root: Path = PROJECT_ROOT) -> str:
     return subprocess.list2cmdline(
-        [str(root / "runtime" / "pythonw.exe"), "-m", "combatai.launcher", "--automatic"]
+        [str(root / "runtime" / "pythonw.exe"), "-m", "dcs_radio_voice_control.launcher", "--automatic"]
     )
 
 

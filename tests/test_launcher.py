@@ -5,28 +5,28 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from combatai.autostart import expected_command
-from combatai import launcher
+from dcs_radio_voice_control.autostart import expected_command
+from dcs_radio_voice_control import launcher
 
 
 class LauncherTests(unittest.TestCase):
     def test_autostart_command_uses_pythonw_and_lightweight_controller(self) -> None:
         command = expected_command(Path(r"C:\Combat AI"))
         self.assertIn("pythonw.exe", command)
-        self.assertIn("combatai.launcher", command)
+        self.assertIn("dcs_radio_voice_control.launcher", command)
         self.assertIn("--automatic", command)
 
-    @patch("combatai.launcher.subprocess.run")
-    @patch("combatai.launcher._prepare", return_value=(True, False))
+    @patch("dcs_radio_voice_control.launcher.subprocess.run")
+    @patch("dcs_radio_voice_control.launcher._prepare", return_value=(True, False))
     def test_manual_launch_runs_voice_worker_after_preflight(self, _prepare, run) -> None:
         run.return_value.returncode = 0
         self.assertEqual(launcher.manual_launch(["--maximum-seconds", "4"]), 0)
         command = run.call_args.args[0]
-        self.assertIn("combatai.voice_command_test", command)
+        self.assertIn("dcs_radio_voice_control.voice_command_test", command)
         self.assertEqual(command[-2:], ["--maximum-seconds", "4"])
 
-    @patch("combatai.launcher.subprocess.run")
-    @patch("combatai.launcher._prepare", return_value=(False, True))
+    @patch("dcs_radio_voice_control.launcher.subprocess.run")
+    @patch("dcs_radio_voice_control.launcher._prepare", return_value=(False, True))
     def test_manual_launch_never_starts_worker_when_dcs_must_restart(self, _prepare, run) -> None:
         self.assertEqual(launcher.manual_launch([]), 3)
         run.assert_not_called()
@@ -56,7 +56,7 @@ class LauncherTests(unittest.TestCase):
         self.assertTrue(worker.terminated)
         self.assertTrue(worker.killed)
 
-    @patch("combatai.launcher._prepare")
+    @patch("dcs_radio_voice_control.launcher._prepare")
     def test_disabled_automatic_controller_stays_lightweight(self, prepare) -> None:
         result = launcher.automatic_controller(
             process_probe=lambda: True,
@@ -66,9 +66,9 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(result, 0)
         prepare.assert_not_called()
 
-    @patch("combatai.launcher._state")
-    @patch("combatai.launcher.subprocess.Popen")
-    @patch("combatai.launcher._prepare", return_value=(True, False))
+    @patch("dcs_radio_voice_control.launcher._state")
+    @patch("dcs_radio_voice_control.launcher.subprocess.Popen")
+    @patch("dcs_radio_voice_control.launcher._prepare", return_value=(True, False))
     def test_controller_starts_worker_for_dcs_and_stops_when_disabled(
         self, _prepare, popen, _state
     ) -> None:

@@ -41,7 +41,7 @@ class HookStatus:
 
 
 class DcsMenuClient:
-    """Owns the Windows side of the CombatAI localhost protocol."""
+    """Owns the Windows side of the DCS Radio Voice Control localhost protocol."""
 
     def __init__(
         self,
@@ -52,7 +52,7 @@ class DcsMenuClient:
         dcs_port: int = 34383,
     ) -> None:
         if listen_host != "127.0.0.1" or dcs_host != "127.0.0.1":
-            raise ValueError("CombatAI v1 is restricted to localhost")
+            raise ValueError("DCS Radio Voice Control v1 is restricted to localhost")
         self._dcs_address = (dcs_host, dcs_port)
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.bind((listen_host, listen_port))
@@ -111,7 +111,7 @@ class DcsMenuClient:
         return request_id
 
     def select_visible(self, item_id: str, revision: int) -> str:
-        """Select one item from the menu CombatAI has left visible in DCS."""
+        """Select one item from the menu DCS Radio Voice Control has left visible in DCS."""
         request_id = self._request_id()
         payload = self._send(
             "select_visible",

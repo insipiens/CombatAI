@@ -10,14 +10,14 @@ import re
 
 def pending_alias_path() -> Path:
     local = os.environ.get("LOCALAPPDATA")
-    base = Path(local) if local else Path.home() / ".combatai"
-    return base / "CombatAI" / "pending_aliases.json"
+    base = Path(local) if local else Path.home() / ".dcs_radio_voice_control"
+    return base / "DCSRadioVoiceControl" / "pending_aliases.json"
 
 
 def pending_meta_alias_path() -> Path:
     local = os.environ.get("LOCALAPPDATA")
-    base = Path(local) if local else Path.home() / ".combatai"
-    return base / "CombatAI" / "pending_meta_aliases.json"
+    base = Path(local) if local else Path.home() / ".dcs_radio_voice_control"
+    return base / "DCSRadioVoiceControl" / "pending_meta_aliases.json"
 
 
 def _key(text: str) -> str:

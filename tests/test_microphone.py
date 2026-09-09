@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 import wave
 
-from combatai.microphone import (
+from dcs_radio_voice_control.microphone import (
     Microphone,
     _meter_fraction,
     _pcm16_level,
@@ -19,7 +19,7 @@ from combatai.microphone import (
     resolve_selection,
     save_selection,
 )
-from combatai.recording_test import _play, _wav_bytes
+from dcs_radio_voice_control.recording_test import _play, _wav_bytes
 
 
 class MicrophoneTests(unittest.TestCase):
@@ -111,7 +111,7 @@ class MicrophoneTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text("not json", encoding="utf-8")
-            with self.assertRaisesRegex(OSError, "Cannot read CombatAI configuration"):
+            with self.assertRaisesRegex(OSError, "Cannot read DCS Radio Voice Control configuration"):
                 save_selection(Microphone(0, "Mic", 1), path)
             self.assertEqual(path.read_text(encoding="utf-8"), "not json")
 

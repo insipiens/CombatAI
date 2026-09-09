@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from combatai.tts import InterruptingPushToTalk
+from dcs_radio_voice_control.tts import InterruptingPushToTalk
 
 
 class FakePtt:

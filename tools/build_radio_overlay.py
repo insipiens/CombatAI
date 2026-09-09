@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a radio-panel file containing the CombatAI hook."""
+"""Generate a radio-panel file containing the DCS Radio Voice Control hook."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 import tempfile
 
-BEGIN_MARKER = b"-- COMBATAI RADIO HOOK BEGIN"
+BEGIN_MARKER = b"-- DCS RADIO VOICE CONTROL HOOK BEGIN"
+LEGACY_BEGIN_MARKER = b"-- COMBATAI RADIO HOOK BEGIN"
 
 
 def build_overlay(source: Path, hook: Path, destination: Path) -> str:
@@ -22,9 +23,14 @@ def build_overlay(source: Path, hook: Path, destination: Path) -> str:
     source_bytes = source.read_bytes()
     hook_bytes = hook.read_bytes()
     if BEGIN_MARKER in source_bytes:
-        raise ValueError("source already contains the CombatAI hook")
+        raise ValueError("source already contains the DCS Radio Voice Control hook")
+    if LEGACY_BEGIN_MARKER in source_bytes:
+        raise ValueError(
+            "source contains the former CombatAI hook; uninstall that version before installing "
+            "DCS Radio Voice Control"
+        )
     if BEGIN_MARKER not in hook_bytes:
-        raise ValueError("hook does not contain the CombatAI marker")
+        raise ValueError("hook does not contain the DCS Radio Voice Control marker")
     if destination.exists():
         raise FileExistsError(
             f"refusing to overwrite {destination}; remove or relocate the existing override explicitly"
@@ -32,7 +38,7 @@ def build_overlay(source: Path, hook: Path, destination: Path) -> str:
 
     source_hash = hashlib.sha256(source_bytes).hexdigest()
     header = (
-        b"\n-- Generated locally by CombatAI; do not distribute this DCS-derived file.\n"
+        b"\n-- Generated locally by DCS Radio Voice Control; do not distribute this DCS-derived file.\n"
         + f"-- Source SHA-256: {source_hash}\n".encode("ascii")
     )
     payload = source_bytes.rstrip() + header + hook_bytes.lstrip()
@@ -65,7 +71,7 @@ def main() -> int:
     parser.add_argument(
         "--hook",
         type=Path,
-        default=Path(__file__).resolve().parents[1] / "dcs" / "CombatAI.radio_hook.lua",
+        default=Path(__file__).resolve().parents[1] / "dcs" / "DCSRadioVoiceControl.radio_hook.lua",
     )
     args = parser.parse_args()
     source_hash = build_overlay(args.source, args.hook, args.destination)

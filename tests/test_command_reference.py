@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import unittest
 
-from combatai.command_reference import (
+from dcs_radio_voice_control.command_reference import (
     MetaCommand,
     list_node_children,
     parse_meta_command,
     resolve_menu_navigation,
     spoken_listing,
 )
-from combatai.protocol import MenuItem
+from dcs_radio_voice_control.protocol import MenuItem
 
 
 ITEMS = (

@@ -178,7 +178,7 @@ def capture_while_ptt(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Record from the selected CombatAI microphone and play it back"
+        description="Record from the selected DCS Radio Voice Control microphone and play it back"
     )
     parser.add_argument("--maximum-seconds", type=float, default=30.0)
     args = parser.parse_args(argv)
@@ -189,7 +189,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         audio = WinMmAudioInput()
         microphone = resolve_selection(audio.microphones(), load_selection())
         keys = WindowsKeys()
-        print("CombatAI microphone recording test")
+        print("DCS Radio Voice Control microphone recording test")
         print(f"Microphone: {microphone.name}")
         print("\nHold SPACE and speak. Release SPACE to hear the recording.")
         print("Press ESC before recording to cancel.\n")
