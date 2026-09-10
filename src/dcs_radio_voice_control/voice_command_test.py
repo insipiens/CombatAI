@@ -253,8 +253,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--maximum-seconds must be greater than zero")
 
     try:
-        # Keep Whisper, Piper, the microphone, and SDL unloaded until DCS has
-        # actually initialized the current DCS Radio Voice Control hook for a mission.
         print("Waiting for DCS and an active mission...", flush=True)
         with DcsMenuClient() as readiness_client:
             wait_for_catalogue(readiness_client)
@@ -337,6 +335,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     )
                     continue
 
+                # A new PTT press is a new explicit pilot demand.  Keep the
+                # semantic latch only inside this transaction; never suppress
+                # an intentionally repeated command on a later PTT press.
+                last_demand_key = None
                 print("Transcribing locally...", flush=True)
                 started = time.monotonic()
                 transcript = recognizer.transcribe(
@@ -374,9 +376,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     stt=stt_metrics,
                 )
 
-                # The menu can change while the pilot is speaking.  Refresh
-                # immediately before interpretation instead of matching a
-                # state captured before PTT was pressed.
                 latest = client.request_menu_and_wait(timeout=0.5)
                 if latest is not None:
                     snapshot = latest
@@ -390,34 +389,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 meta_alias = reviewed_meta_alias(transcript)
                 meta = parse_meta_command(meta_alias or transcript)
                 if meta_alias is not None:
-                    write_event(
-                        "alias_applied",
-                        kind="meta",
-                        transcript=transcript,
-                        target=meta_alias,
-                        revision=snapshot.revision,
-                    )
+                    write_event("alias_applied", kind="meta", transcript=transcript, target=meta_alias, revision=snapshot.revision)
                 if meta is not None:
                     if meta.kind == "repeat":
                         if speech.repeat():
                             response = speech.last_text
                             print(f"DCS Radio Voice Control: {response}")
-                            write_event(
-                                "meta_command",
-                                command="repeat",
-                                transcript=transcript,
-                                response=response,
-                                revision=snapshot.revision,
-                            )
+                            write_event("meta_command", command="repeat", transcript=transcript, response=response, revision=snapshot.revision)
                         else:
                             print("Nothing spoken to repeat.")
-                            write_event(
-                                "meta_command",
-                                command="repeat",
-                                transcript=transcript,
-                                reason="nothing_to_repeat",
-                                revision=snapshot.revision,
-                            )
+                            write_event("meta_command", command="repeat", transcript=transcript, reason="nothing_to_repeat", revision=snapshot.revision)
                         continue
 
                     if meta.kind in {"previous_menu", "exit_menu"}:
@@ -427,518 +408,202 @@ def main(argv: Sequence[str] | None = None) -> int:
                         snapshot, result = control_live_menu(client, snapshot, operation)
                         remember_catalogue(known_items, snapshot.items)
                         if result is not None and result.accepted:
-                            visible_menu_path = visible_path_after_menu_control(
-                                visible_menu_path,
-                                operation,
-                            )
+                            visible_menu_path = visible_path_after_menu_control(visible_menu_path, operation)
                             last_demand_key = demand_key
-                            detail = (
-                                "DCS opened the previous menu."
-                                if operation == "previous"
-                                else "DCS closed the radio menu."
-                            )
+                            detail = "DCS opened the previous menu." if operation == "previous" else "DCS closed the radio menu."
                             print(detail)
-                            write_event(
-                                "menu_control",
-                                transcript=transcript,
-                                operation=operation,
-                                accepted=True,
-                                revision=snapshot.revision,
-                            )
+                            write_event("menu_control", transcript=transcript, operation=operation, accepted=True, revision=snapshot.revision)
                         else:
                             reason = result.code if result is not None else "timeout"
-                            detail = (
-                                f"DCS rejected the menu control: {reason}."
-                                if result is not None
-                                else "DCS did not acknowledge the menu control."
-                            )
+                            detail = f"DCS rejected the menu control: {reason}." if result is not None else "DCS did not acknowledge the menu control."
                             print(detail)
-                            write_event(
-                                "menu_control",
-                                transcript=transcript,
-                                operation=operation,
-                                accepted=False,
-                                reason=reason,
-                                revision=snapshot.revision,
-                            )
+                            write_event("menu_control", transcript=transcript, operation=operation, accepted=False, reason=reason, revision=snapshot.revision)
                         continue
 
                     if meta.kind == "show":
                         if visible_menu_path is None:
-                            navigation, snapshot, result = open_live_menu(
-                                client,
-                                snapshot,
-                                meta.node,
-                            )
+                            navigation, snapshot, result = open_live_menu(client, snapshot, meta.node)
                         else:
                             if meta.node is None:
-                                navigation = MenuNavigation(
-                                    "found",
-                                    "menu.root" if not visible_menu_path else None,
-                                    visible_menu_path,
-                                )
-                                result = ActionResult(
-                                    "local",
-                                    True,
-                                    "menu_already_visible",
-                                    "A guided menu is already visible",
-                                )
+                                navigation = MenuNavigation("found", "menu.root" if not visible_menu_path else None, visible_menu_path)
+                                result = ActionResult("local", True, "menu_already_visible", "A guided menu is already visible")
                             else:
-                                navigation = resolve_menu_navigation(
-                                    snapshot.items,
-                                    meta.node,
-                                    current_path=visible_menu_path,
-                                )
+                                navigation = resolve_menu_navigation(snapshot.items, meta.node, current_path=visible_menu_path)
                                 result = None
                                 if navigation.status == "leaf":
-                                    result = ActionResult(
-                                        "local",
-                                        True,
-                                        "command_visible",
-                                        "The requested command is on the displayed menu",
-                                    )
-                            if (
-                                meta.node is not None
-                                and navigation.status == "found"
-                                and navigation.menu_id is not None
-                                and navigation.path != visible_menu_path
-                            ):
-                                target = next(
-                                    (
-                                        item
-                                        for item in snapshot.items
-                                        if item.action_id == navigation.menu_id
-                                    ),
-                                    None,
-                                )
+                                    result = ActionResult("local", True, "command_visible", "The requested command is on the displayed menu")
+                            if meta.node is not None and navigation.status == "found" and navigation.menu_id is not None and navigation.path != visible_menu_path:
+                                target = next((item for item in snapshot.items if item.action_id == navigation.menu_id), None)
                                 if target is not None:
-                                    snapshot, result = select_visible_item(
-                                        client,
-                                        snapshot,
-                                        target,
-                                    )
-                            elif (
-                                meta.node is not None
-                                and navigation.status == "found"
-                                and navigation.path == visible_menu_path
-                            ):
-                                result = ActionResult(
-                                    "local",
-                                    True,
-                                    "menu_already_visible",
-                                    "The requested command is already shown",
-                                )
+                                    snapshot, result = select_visible_item(client, snapshot, target)
+                            elif meta.node is not None and navigation.status == "found" and navigation.path == visible_menu_path:
+                                result = ActionResult("local", True, "menu_already_visible", "The requested command is already shown")
                         remember_catalogue(known_items, snapshot.items)
                         if result is not None and result.accepted:
                             visible_menu_path = navigation.path
-                            last_demand_key = (
-                                "menu",
-                                " > ".join(navigation.path),
-                            )
+                            last_demand_key = ("menu", " > ".join(navigation.path))
                             shown = " > ".join(navigation.path) or "radio"
                             if result.code == "command_visible":
                                 command = navigation.choices[0]
                                 print(f"{command} is displayed.")
-                                write_event(
-                                    "menu_command_visible",
-                                    transcript=transcript,
-                                    command=command,
-                                    visible_path=list(navigation.path),
-                                    revision=snapshot.revision,
-                                )
+                                write_event("menu_command_visible", transcript=transcript, command=command, visible_path=list(navigation.path), revision=snapshot.revision)
                             else:
                                 print(f"DCS opened the {shown} menu.")
-                                write_event(
-                                    "menu_shown",
-                                    transcript=transcript,
-                                    node=shown,
-                                    menu_id=navigation.menu_id,
-                                    revision=snapshot.revision,
-                                )
+                                write_event("menu_shown", transcript=transcript, node=shown, menu_id=navigation.menu_id, revision=snapshot.revision)
                         else:
                             if navigation.status == "ambiguous":
-                                detail = "Which menu: " + ", ".join(navigation.choices)
-                                reason = "ambiguous"
+                                detail = "Which menu: " + ", ".join(navigation.choices); reason = "ambiguous"
                             elif navigation.status == "unavailable":
-                                detail = "That menu is not currently available"
-                                reason = "not_currently_available"
+                                detail = "That menu is not currently available"; reason = "not_currently_available"
                             elif navigation.status == "not_found":
-                                detail = "That menu was not recognised"
-                                reason = "no_match"
+                                detail = "That menu was not recognised"; reason = "no_match"
                             elif result is None:
-                                detail = "DCS did not acknowledge the menu request"
-                                reason = "timeout"
+                                detail = "DCS did not acknowledge the menu request"; reason = "timeout"
                             else:
-                                detail = f"DCS rejected the menu request: {result.code}"
-                                reason = result.code
+                                detail = f"DCS rejected the menu request: {result.code}"; reason = result.code
                             print(detail + ".")
-                            write_event(
-                                "menu_show_rejected",
-                                transcript=transcript,
-                                reason=reason,
-                                choices=list(navigation.choices),
-                                revision=snapshot.revision,
-                            )
+                            write_event("menu_show_rejected", transcript=transcript, reason=reason, choices=list(navigation.choices), revision=snapshot.revision)
                         continue
 
                     listing = list_node_children(snapshot.items, meta.node)
                     response = spoken_listing(listing)
                     print(f"DCS Radio Voice Control: {response}")
                     speech.speak(response)
-                    meta_alias_recorded = bool(
-                        listing.status == "not_found" and record_pending_meta_alias(transcript)
-                    )
-                    write_event(
-                        "meta_command",
-                        command="list_commands",
-                        transcript=transcript,
-                        node=meta.node,
-                        resolved_node=listing.node if listing.status == "found" else None,
-                        children=list(listing.children),
-                        choices=list(listing.choices),
-                        candidate_meta_alias_recorded=meta_alias_recorded,
-                        response=response,
-                        revision=snapshot.revision,
-                    )
+                    meta_alias_recorded = bool(listing.status == "not_found" and record_pending_meta_alias(transcript))
+                    write_event("meta_command", command="list_commands", transcript=transcript, node=meta.node, resolved_node=listing.node if listing.status == "found" else None, children=list(listing.children), choices=list(listing.choices), candidate_meta_alias_recorded=meta_alias_recorded, response=response, revision=snapshot.revision)
                     continue
 
                 function_key = parse_function_key(transcript)
                 if function_key is not None:
                     if visible_menu_path is None:
                         print("No guided menu is displayed. Say Show Menu first.")
-                        write_event(
-                            "function_key_rejected",
-                            transcript=transcript,
-                            function_key=function_key,
-                            reason="guided_menu_not_active",
-                            revision=snapshot.revision,
-                        )
-                        if cues_enabled:
-                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        write_event("function_key_rejected", transcript=transcript, function_key=function_key, reason="guided_menu_not_active", revision=snapshot.revision)
+                        if cues_enabled: play_cue("rejected", volume=cue_volume, output=speech.output)
                         continue
-                    target = function_key_item(
-                        snapshot.items,
-                        visible_menu_path,
-                        function_key,
-                    )
+                    target = function_key_item(snapshot.items, visible_menu_path, function_key)
                     if target is None:
                         print(f"F{function_key} is not an option on the displayed menu.")
-                        write_event(
-                            "function_key_rejected",
-                            transcript=transcript,
-                            function_key=function_key,
-                            reason="not_on_displayed_menu",
-                            visible_path=list(visible_menu_path),
-                            revision=snapshot.revision,
-                        )
-                        if cues_enabled:
-                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        write_event("function_key_rejected", transcript=transcript, function_key=function_key, reason="not_on_displayed_menu", visible_path=list(visible_menu_path), revision=snapshot.revision)
+                        if cues_enabled: play_cue("rejected", volume=cue_volume, output=speech.output)
                         continue
                     snapshot, selection_result = select_visible_item(client, snapshot, target)
                     if selection_result is None or not selection_result.accepted:
-                        reason = (
-                            selection_result.code
-                            if selection_result is not None
-                            else "timeout"
-                        )
+                        reason = selection_result.code if selection_result is not None else "timeout"
                         print(f"DCS could not select F{function_key}: {reason}.")
-                        write_event(
-                            "function_key_rejected",
-                            transcript=transcript,
-                            function_key=function_key,
-                            reason=reason,
-                            item=" > ".join(target.path),
-                            revision=snapshot.revision,
-                        )
-                        if cues_enabled:
-                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        write_event("function_key_rejected", transcript=transcript, function_key=function_key, reason=reason, item=" > ".join(target.path), revision=snapshot.revision)
+                        if cues_enabled: play_cue("rejected", volume=cue_volume, output=speech.output)
                         continue
-                    last_demand_key = (
-                        "action" if target.executable else "menu",
-                        target.action_id if target.executable else " > ".join(target.path),
-                    )
+                    last_demand_key = ("action" if target.executable else "menu", target.action_id if target.executable else " > ".join(target.path))
                     print(f"DCS selected F{function_key}: {' > '.join(target.path)}.")
-                    write_event(
-                        "function_key_selected",
-                        transcript=transcript,
-                        function_key=function_key,
-                        item=" > ".join(target.path),
-                        item_id=target.action_id,
-                        executable=target.executable,
-                        revision=snapshot.revision,
-                    )
+                    write_event("function_key_selected", transcript=transcript, function_key=function_key, item=" > ".join(target.path), item_id=target.action_id, executable=target.executable, revision=snapshot.revision)
                     if target.executable:
                         visible_menu_path = None
-                        if cues_enabled:
-                            play_cue("accepted", volume=cue_volume, output=speech.output)
+                        if cues_enabled: play_cue("accepted", volume=cue_volume, output=speech.output)
                         wait_for_catalogue(client)
-                        if client.snapshot is not None:
-                            remember_catalogue(known_items, client.snapshot.items)
+                        if client.snapshot is not None: remember_catalogue(known_items, client.snapshot.items)
                     else:
                         visible_menu_path = target.path
                     continue
 
                 recipient, action_alias = action_alias_for_transcript(transcript)
                 if recipient is not None and recipient.alias is not None:
-                    # Scoped recipient aliases must retain the ordinary command
-                    # score; a legacy whole-command alias must not bypass it.
                     action_alias = None
-                    write_event(
-                        "recipient_scope_applied",
-                        transcript=transcript,
-                        alias=recipient.alias,
-                        scope=recipient.scope,
-                        command=recipient.command,
-                        revision=snapshot.revision,
-                    )
+                    write_event("recipient_scope_applied", transcript=transcript, alias=recipient.alias, scope=recipient.scope, command=recipient.command, revision=snapshot.revision)
+                    leaf_alias = reviewed_alias(recipient.command)
+                    if leaf_alias is not None:
+                        write_event("alias_applied", kind="action_leaf", transcript=recipient.command, target=leaf_alias, scope=recipient.scope, revision=snapshot.revision)
                 if action_alias is not None:
-                    write_event(
-                        "alias_applied",
-                        kind="action",
-                        transcript=transcript,
-                        target=action_alias,
-                        revision=snapshot.revision,
-                    )
+                    write_event("alias_applied", kind="action", transcript=transcript, target=action_alias, revision=snapshot.revision)
 
                 if visible_menu_path is not None and action_alias is None:
-                    navigation = resolve_menu_navigation(
-                        snapshot.items,
-                        transcript,
-                        current_path=visible_menu_path,
-                    )
+                    navigation = resolve_menu_navigation(snapshot.items, transcript, current_path=visible_menu_path)
                     if navigation.status == "found" and navigation.menu_id is not None:
-                        target = next(
-                            (
-                                item
-                                for item in snapshot.items
-                                if item.action_id == navigation.menu_id
-                            ),
-                            None,
-                        )
+                        target = next((item for item in snapshot.items if item.action_id == navigation.menu_id), None)
                         navigation_result = None
                         if target is not None:
-                            snapshot, navigation_result = select_visible_item(
-                                client,
-                                snapshot,
-                                target,
-                            )
+                            snapshot, navigation_result = select_visible_item(client, snapshot, target)
                         if navigation_result is not None and navigation_result.accepted:
                             visible_menu_path = navigation.path
                             last_demand_key = ("menu", " > ".join(navigation.path))
                             shown = " > ".join(navigation.path)
                             print(f"DCS opened the {shown} menu.")
-                            write_event(
-                                "menu_navigated",
-                                transcript=transcript,
-                                node=shown,
-                                menu_id=navigation.menu_id,
-                                revision=snapshot.revision,
-                            )
+                            write_event("menu_navigated", transcript=transcript, node=shown, menu_id=navigation.menu_id, revision=snapshot.revision)
                         else:
-                            reason = (
-                                navigation_result.code
-                                if navigation_result is not None
-                                else "timeout"
-                            )
+                            reason = navigation_result.code if navigation_result is not None else "timeout"
                             print("DCS could not open that submenu.")
-                            write_event(
-                                "menu_show_rejected",
-                                transcript=transcript,
-                                reason=reason,
-                                revision=snapshot.revision,
-                            )
+                            write_event("menu_show_rejected", transcript=transcript, reason=reason, revision=snapshot.revision)
                         continue
 
                 live_actions = executable_catalogue(snapshot.items)
                 scoped_actions = contextual_catalogue(snapshot.items, visible_menu_path)
                 match_transcript = action_alias or transcript
-                match = (
-                    match_reviewed_alias(action_alias, scoped_actions)
-                    if action_alias is not None
-                    else match_catalogue(transcript, scoped_actions)
-                )
-                candidate = execution_candidate(
-                    match,
-                    minimum_score=minimum_score,
-                    minimum_lead=minimum_lead,
-                )
-                ranked = [
-                    {
-                        "action_id": ranked_match.item.action_id,
-                        "path": list(ranked_match.item.path),
-                        "score": round(ranked_match.score, 4),
-                    }
-                    for ranked_match in match.ranked[:5]
-                ]
+                match = match_reviewed_alias(action_alias, scoped_actions) if action_alias is not None else match_catalogue(transcript, scoped_actions)
+                candidate = execution_candidate(match, minimum_score=minimum_score, minimum_lead=minimum_lead)
+                ranked = [{"action_id": ranked_match.item.action_id, "path": list(ranked_match.item.path), "score": round(ranked_match.score, 4)} for ranked_match in match.ranked[:5]]
                 if candidate is None:
                     if visible_menu_path is not None:
                         print("That is not an option on the displayed menu.")
-                        write_event(
-                            "command_rejected",
-                            reason="not_on_displayed_menu",
-                            transcript=transcript,
-                            visible_path=list(visible_menu_path),
-                            revision=snapshot.revision,
-                            candidates=ranked,
-                            duration_seconds=round(duration, 3),
-                            average_dbfs=round(dbfs, 2) if dbfs is not None else None,
-                            transcription_seconds=round(elapsed, 3),
-                            stt=stt_metrics,
-                        )
-                        if cues_enabled:
-                            play_cue("rejected", volume=cue_volume, output=speech.output)
+                        write_event("command_rejected", reason="not_on_displayed_menu", transcript=transcript, visible_path=list(visible_menu_path), revision=snapshot.revision, candidates=ranked, duration_seconds=round(duration, 3), average_dbfs=round(dbfs, 2) if dbfs is not None else None, transcription_seconds=round(elapsed, 3), stt=stt_metrics)
+                        if cues_enabled: play_cue("rejected", volume=cue_volume, output=speech.output)
                         continue
-                    unavailable = unavailable_candidate(
-                        match_transcript,
-                        live_actions,
-                        known_items,
-                        minimum_score=minimum_score,
-                        minimum_lead=minimum_lead,
-                    )
+                    unavailable = unavailable_candidate(match_transcript, live_actions, known_items, minimum_score=minimum_score, minimum_lead=minimum_lead)
                     if unavailable is not None:
                         response = f"{unavailable.item.label} is not currently available."
                         print(f"DCS Radio Voice Control: {response}")
                         speech.speak(response)
-                        write_event(
-                            "command_rejected",
-                            reason="not_currently_available",
-                            transcript=transcript,
-                            intended_action=" > ".join(unavailable.item.path),
-                            revision=snapshot.revision,
-                            candidates=ranked,
-                            duration_seconds=round(duration, 3),
-                            average_dbfs=round(dbfs, 2) if dbfs is not None else None,
-                            transcription_seconds=round(elapsed, 3),
-                            stt=stt_metrics,
-                        )
+                        write_event("command_rejected", reason="not_currently_available", transcript=transcript, intended_action=" > ".join(unavailable.item.path), revision=snapshot.revision, candidates=ranked, duration_seconds=round(duration, 3), average_dbfs=round(dbfs, 2) if dbfs is not None else None, transcription_seconds=round(elapsed, 3), stt=stt_metrics)
                         continue
-
                     _print_result(match)
                     if match.status == "matched" and match.best is not None:
                         if match.best.score < minimum_score:
-                            reason = "below_minimum_score"
-                            print(f"Match is below the configured {minimum_score:.0%} score.")
+                            reason = "below_minimum_score"; print(f"Match is below the configured {minimum_score:.0%} score.")
                         elif len(match.ranked) > 1:
-                            lead = match.best.score - match.ranked[1].score
-                            reason = "insufficient_lead"
-                            runner_up = match.ranked[1]
-                            print(
-                                f"Best match leads the runner-up by {lead:.0%}; "
-                                f"configured minimum is {minimum_lead:.0%}."
-                            )
-                            print(
-                                "Runner-up: "
-                                + " > ".join(runner_up.item.path)
-                                + f" ({runner_up.score:.0%})"
-                            )
+                            lead = match.best.score - match.ranked[1].score; reason = "insufficient_lead"; runner_up = match.ranked[1]
+                            print(f"Best match leads the runner-up by {lead:.0%}; configured minimum is {minimum_lead:.0%}.")
+                            print("Runner-up: " + " > ".join(runner_up.item.path) + f" ({runner_up.score:.0%})")
                         else:
                             reason = "not_executable"
                     else:
                         reason = match.status
-                    alias_recorded = bool(
-                        match.best is not None
-                        and match.best.score >= MINIMUM_ALIAS_CANDIDATE_SCORE
-                        and action_alias is None
-                        and record_pending_alias(transcript)
-                    )
+                    alias_recorded = bool(match.best is not None and match.best.score >= MINIMUM_ALIAS_CANDIDATE_SCORE and action_alias is None and record_pending_alias(transcript))
                     print("Nothing was sent to DCS.")
-                    write_event(
-                        "command_rejected",
-                        reason=reason,
-                        transcript=transcript,
-                        revision=snapshot.revision,
-                        candidates=ranked,
-                        candidate_alias_recorded=alias_recorded,
-                        duration_seconds=round(duration, 3),
-                        average_dbfs=round(dbfs, 2) if dbfs is not None else None,
-                        transcription_seconds=round(elapsed, 3),
-                        stt=stt_metrics,
-                    )
-                    if cues_enabled:
-                        play_cue("rejected", volume=cue_volume, output=speech.output)
+                    write_event("command_rejected", reason=reason, transcript=transcript, revision=snapshot.revision, candidates=ranked, candidate_alias_recorded=alias_recorded, duration_seconds=round(duration, 3), average_dbfs=round(dbfs, 2) if dbfs is not None else None, transcription_seconds=round(elapsed, 3), stt=stt_metrics)
+                    if cues_enabled: play_cue("rejected", volume=cue_volume, output=speech.output)
                     continue
 
                 demand_key = ("action", candidate.item.action_id)
                 if demand_key == last_demand_key:
                     print("Repeated command ignored.")
-                    write_event(
-                        "command_debounced",
-                        transcript=transcript,
-                        action=" > ".join(candidate.item.path),
-                        action_id=candidate.item.action_id,
-                        revision=snapshot.revision,
-                    )
+                    write_event("command_debounced", transcript=transcript, action=" > ".join(candidate.item.path), action_id=candidate.item.action_id, revision=snapshot.revision)
                     continue
                 last_demand_key = demand_key
                 guided_execution = visible_menu_path is not None
                 _print_result(match)
-                write_event(
-                    "command_sent",
-                    transcript=transcript,
-                    action=" > ".join(candidate.item.path),
-                    action_id=candidate.item.action_id,
-                    score=round(candidate.score, 4),
-                    revision=snapshot.revision,
-                    candidates=ranked,
-                    duration_seconds=round(duration, 3),
-                    average_dbfs=round(dbfs, 2) if dbfs is not None else None,
-                    transcription_seconds=round(elapsed, 3),
-                    stt=stt_metrics,
-                )
+                write_event("command_sent", transcript=transcript, action=" > ".join(candidate.item.path), action_id=candidate.item.action_id, score=round(candidate.score, 4), revision=snapshot.revision, candidates=ranked, duration_seconds=round(duration, 3), average_dbfs=round(dbfs, 2) if dbfs is not None else None, transcription_seconds=round(elapsed, 3), stt=stt_metrics)
                 active_candidate = candidate
                 active_revision = snapshot.revision
                 if guided_execution:
-                    snapshot, result = select_visible_item(
-                        client,
-                        snapshot,
-                        active_candidate.item,
-                    )
+                    snapshot, result = select_visible_item(client, snapshot, active_candidate.item)
                     active_revision = snapshot.revision
                 else:
                     request_id = client.execute(active_candidate.item.action_id, active_revision)
                     result = client.wait_for_result(request_id)
 
-                if (
-                    not guided_execution
-                    and result is not None
-                    and not result.accepted
-                    and result.code == "stale_revision"
-                ):
+                if not guided_execution and result is not None and not result.accepted and result.code == "stale_revision":
                     refreshed = client.request_menu_and_wait(timeout=2.0)
                     retry_candidate = None
                     if refreshed is not None:
                         remember_catalogue(known_items, refreshed.items)
                         retry_items = contextual_catalogue(refreshed.items, visible_menu_path)
                         retry_match = match_catalogue(transcript, retry_items)
-                        possible_retry = execution_candidate(
-                            retry_match,
-                            minimum_score=minimum_score,
-                            minimum_lead=minimum_lead,
-                        )
-                        if (
-                            possible_retry is not None
-                            and (
-                                possible_retry.item.path == candidate.item.path
-                                or strong_semantic_match(transcript, possible_retry.item)
-                            )
-                        ):
+                        possible_retry = execution_candidate(retry_match, minimum_score=minimum_score, minimum_lead=minimum_lead)
+                        if possible_retry is not None and (possible_retry.item.path == candidate.item.path or strong_semantic_match(transcript, possible_retry.item)):
                             retry_candidate = possible_retry
-
                     if retry_candidate is not None and refreshed is not None:
                         active_candidate = retry_candidate
                         active_revision = refreshed.revision
-                        print(
-                            "DCS menu changed; revalidated the same command against "
-                            f"catalogue revision {active_revision}."
-                        )
-                        write_event(
-                            "command_revalidated",
-                            transcript=transcript,
-                            action=" > ".join(active_candidate.item.path),
-                            action_id=active_candidate.item.action_id,
-                            previous_revision=snapshot.revision,
-                            revision=active_revision,
-                        )
+                        print("DCS menu changed; revalidated the same command against " f"catalogue revision {active_revision}.")
+                        write_event("command_revalidated", transcript=transcript, action=" > ".join(active_candidate.item.path), action_id=active_candidate.item.action_id, previous_revision=snapshot.revision, revision=active_revision)
                         request_id = client.execute(active_candidate.item.action_id, active_revision)
                         result = client.wait_for_result(request_id)
                     else:
@@ -947,30 +612,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if result is None:
                     print("DCS did not acknowledge the command; execution state is unknown.")
                     write_event("dcs_result", reason="timeout", action_id=active_candidate.item.action_id)
-                    if cues_enabled:
-                        play_cue("rejected", volume=cue_volume, output=speech.output)
+                    if cues_enabled: play_cue("rejected", volume=cue_volume, output=speech.output)
                     continue
                 if not result.accepted:
                     print(f"DCS rejected the command: {result.code}: {result.detail}")
-                    write_event(
-                        "dcs_result",
-                        reason=result.code,
-                        message=result.detail,
-                        action_id=active_candidate.item.action_id,
-                        revision=active_revision,
-                    )
-                    if cues_enabled:
-                        play_cue("rejected", volume=cue_volume, output=speech.output)
+                    write_event("dcs_result", reason=result.code, message=result.detail, action_id=active_candidate.item.action_id, revision=active_revision)
+                    if cues_enabled: play_cue("rejected", volume=cue_volume, output=speech.output)
                     continue
                 print("DCS accepted the voice command.")
-                write_event(
-                    "dcs_result",
-                    action_id=active_candidate.item.action_id,
-                    accepted=True,
-                    revision=active_revision,
-                )
-                if cues_enabled:
-                    play_cue("accepted", volume=cue_volume, output=speech.output)
+                write_event("dcs_result", action_id=active_candidate.item.action_id, accepted=True, revision=active_revision)
+                if cues_enabled: play_cue("accepted", volume=cue_volume, output=speech.output)
                 visible_menu_path = None
                 wait_for_catalogue(client)
                 if client.snapshot is not None:

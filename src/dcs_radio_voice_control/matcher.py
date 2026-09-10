@@ -81,23 +81,8 @@ def build_vocabulary_prompt(
     labels: list[str] = []
     seen: set[str] = set()
     for label in (
-        "Show Menu",
-        "Previous Menu",
-        "Exit Menu",
-        "F1",
-        "F2",
-        "F3",
-        "F4",
-        "F5",
-        "F6",
-        "F7",
-        "F8",
-        "F9",
-        "F10",
-        "F11",
-        "F12",
-        "Back",
-        "Close Menu",
+        "Show Menu", "Previous Menu", "Exit Menu", "F1", "F2", "F3", "F4",
+        "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "Back", "Close Menu",
     ):
         candidate = prefix + ", ".join((*labels, label)) + "."
         if len(candidate) > maximum_characters:
@@ -137,11 +122,24 @@ def match_catalogue(
     command = recipient.command if recipient is not None else spoken
     if not command:
         return MatchResult("no_match", ())
+
+    scoped_items = tuple(
+        item
+        for item in items
+        if scope is None or normalize_phrase(item.path[0]) == scope
+    )
+    if not scoped_items:
+        return MatchResult("no_match", ())
+
+    # Action aliases are composable with recipient aliases.  The recipient is
+    # resolved first and contributes no action score; the remaining command may
+    # then map exactly to a leaf/action target inside that recipient's scope.
+    alias_target = reviewed_aliases().get(command)
+    if alias_target is not None and normalize_phrase(alias_target) not in _SCOPES:
+        return match_reviewed_alias(alias_target, scoped_items)
+
     all_ranked: list[RankedMatch] = []
-    for item in items:
-        item_scope = normalize_phrase(item.path[0])
-        if scope is not None and item_scope != scope:
-            continue
+    for item in scoped_items:
         forms = _spoken_forms(item)
         score = max(
             _similarity(command, form, contextual=contextual)
@@ -218,8 +216,6 @@ def _hierarchical_similarity(spoken: str, item: MenuItem) -> float:
     if len(spoken_words) <= len(leaf_words):
         return leaf_score
 
-    # For deeper paths, the middle menu node is discriminating evidence while
-    # the root is shared by every command in that radio scope.
     context = path[1:-1] if len(path) > 2 else path[:-1]
     context_score = max(
         (_best_window_similarity(segment, spoken) for segment in context),
